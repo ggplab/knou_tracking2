@@ -19,7 +19,7 @@ class SupabaseConfig {
     initialize() {
         try {
             // 환경변수가 설정되지 않은 경우 경고
-            if (this.SUPABASE_URL === 'https://qeecatyznizafegpmest.supabase.co' || this.SUPABASE_ANON_KEY === 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlZWNhdHl6bml6YWZlZ3BtZXN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY5NTI3MTgsImV4cCI6MjA3MjUyODcxOH0.nBUn4FfKsXcj6eHxO_x34t2RtYiKIYW4LevvNKIvUjs') {
+            if (this.SUPABASE_URL === 'SUPABASE_URL' || this.SUPABASE_ANON_KEY === 'SUPABASE_API') {
                 console.warn('⚠️ Supabase 설정이 필요합니다. config.js 파일에서 SUPABASE_URL과 SUPABASE_ANON_KEY를 설정해주세요.');
                 return false;
             }
