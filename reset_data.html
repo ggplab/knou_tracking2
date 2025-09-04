@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>데이터 초기화</title>
+</head>
+<body>
+    <h1>데이터 초기화</h1>
+    <button onclick="resetData()">localStorage 데이터 초기화</button>
+    <p id="result"></p>
+
+    <script>
+        function resetData() {
+            localStorage.removeItem('knou-users');
+            document.getElementById('result').textContent = '데이터가 초기화되었습니다. 메인 페이지를 새로고침하세요.';
+        }
+    </script>
+</body>
+</html>
