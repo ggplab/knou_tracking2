@@ -1965,3 +1965,19 @@ body {
 .progress-ring-circle {
   will-change: stroke-dashoffset, stroke;
 }
+
+.github-link {
+    padding: 8px 12px;
+    border-radius: 6px;
+    transition: background-color 0.3s;
+}
+
+.github-link:hover {
+    background-color: #f0f0f0;
+}
+
+.version-info {
+    margin-left: 10px;
+    font-size: 0.8em;
+    color: #777;
+}

@@ -721,7 +721,8 @@ class SupabaseDataManager {
         }
     }
 
-    async addUser(name, department) {
+    async addUser(user) {
+        const { name, department } = user;
         const { data, error } = await this.supabase
             .from('users')
             .insert([{ name, department }])
