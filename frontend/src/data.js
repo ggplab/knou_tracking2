@@ -1,11 +1,50 @@
-// Mock data for KNOU tracking system
+// KNOU tracking system data manager with Supabase support
 class DataManager {
     constructor() {
+        this.useSupabase = false;
+        this.supabaseManager = null;
+        this.initialized = false;
+        this.initializeDataManager();
+    }
+
+    async initializeDataManager() {
+        // Supabase 사용 가능한지 확인
+        try {
+            if (typeof supabaseConfig !== 'undefined' && supabaseConfig.initialized) {
+                this.supabaseManager = new SupabaseDataManager();
+                await this.supabaseManager.init();
+                
+                if (this.supabaseManager.initialized && !this.supabaseManager.fallbackToLocalStorage) {
+                    this.useSupabase = true;
+                    console.log('✅ Supabase 모드로 실행');
+                    
+                    // Supabase 연결 성공 시 기존 localStorage 데이터 정리
+                    if (localStorage.getItem('knou-users')) {
+                        console.log('🧹 기존 localStorage 데이터 정리 중...');
+                        localStorage.removeItem('knou-users');
+                    }
+                    this.initialized = true;
+                    return;
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ Supabase 초기화 실패, LocalStorage로 폴백:', error);
+        }
+
+        // LocalStorage 모드로 폴백
+        console.log('📦 LocalStorage 모드로 실행');
+        this.useSupabase = false;
         this.initializeData();
+        this.initialized = true;
     }
 
     initializeData() {
-        // Initialize with sample data if not exists
+        // Supabase를 사용하는 경우 localStorage 샘플 데이터는 불필요
+        if (this.useSupabase) {
+            return;
+        }
+        
+        // LocalStorage 모드에서만 샘플 데이터 초기화
         if (!localStorage.getItem('knou-users')) {
             const sampleData = {
                 users: [
@@ -229,8 +268,20 @@ class DataManager {
 
     // Data access methods
     getData() {
+        // Supabase 모드에서는 localStorage를 사용하지 않음
+        if (this.useSupabase) {
+            return null;
+        }
+        
         const data = localStorage.getItem('knou-users');
-        return data ? JSON.parse(data) : null;
+        if (data) {
+            return JSON.parse(data);
+        } else {
+            // 데이터가 없으면 초기화하고 반환
+            this.initializeData();
+            const newData = localStorage.getItem('knou-users');
+            return JSON.parse(newData);
+        }
     }
 
     saveData(data) {
@@ -238,12 +289,20 @@ class DataManager {
     }
 
     // Users
-    getUsers() {
+    async getUsers() {
+        if (this.useSupabase) {
+            return await this.supabaseManager.getUsers();
+        }
+        
         const data = this.getData();
         return data ? data.users : [];
     }
 
-    addUser(user) {
+    async addUser(user) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.addUser(user);
+        }
+        
         const data = this.getData();
         const newId = Math.max(...data.users.map(u => u.id), 0) + 1;
         const newUser = {
@@ -257,7 +316,11 @@ class DataManager {
         return newUser;
     }
 
-    deleteUser(userId) {
+    async deleteUser(userId) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.deleteUser(userId);
+        }
+        
         const data = this.getData();
         data.users = data.users.filter(u => u.id !== userId);
         data.userCourses = data.userCourses.filter(uc => uc.userId !== userId);
@@ -266,12 +329,30 @@ class DataManager {
     }
 
     // Courses
-    getCourses() {
+    async getCourses() {
+        if (this.useSupabase) {
+            const courses = await this.supabaseManager.getCourses();
+            // 속성명을 JavaScript 코드에서 기대하는 형식으로 변환
+            return courses.map(course => ({
+                id: course.id,
+                courseCode: course.course_code,
+                courseName: course.course_name,
+                department: course.department,
+                grade: course.grade,
+                lessonCount: course.lesson_count,
+                createdAt: course.created_at || new Date().toISOString()
+            }));
+        }
+        
         const data = this.getData();
         return data ? data.courses : [];
     }
 
-    addCourse(course) {
+    async addCourse(course) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.addCourse(course);
+        }
+        
         const data = this.getData();
         const newId = Math.max(...data.courses.map(c => c.id), 0) + 1;
         const newCourse = {
@@ -301,24 +382,64 @@ class DataManager {
 
     // Departments
     getDepartments() {
+        if (this.useSupabase) {
+            // Supabase에서는 고정된 학과 정보 반환
+            return [
+                { id: 1, name: '통계·데이터' },
+                { id: 2, name: '컴퓨터' }
+            ];
+        }
+        
         const data = this.getData();
         return data ? data.departments : [];
     }
 
-    getCoursesByDepartment(department) {
+    async getCoursesByDepartment(department) {
+        if (this.useSupabase) {
+            const courses = await this.supabaseManager.getCoursesByDepartment(department);
+            // 속성명을 JavaScript 코드에서 기대하는 형식으로 변환
+            return courses.map(course => ({
+                id: course.id,
+                courseCode: course.course_code,
+                courseName: course.course_name,
+                department: course.department,
+                grade: course.grade,
+                lessonCount: course.lesson_count,
+                createdAt: course.created_at || new Date().toISOString()
+            }));
+        }
+        
         const data = this.getData();
         return data ? data.courses.filter(c => c.department === department) : [];
     }
 
     // Lessons
-    getLessons() {
+    async getLessons() {
+        if (this.useSupabase) {
+            return await this.supabaseManager.getLessons();
+        }
+        
         const data = this.getData();
         return data ? data.lessons : [];
     }
 
-    getLessonsByCourseId(courseId) {
+    async getLessonsByCourseId(courseId) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.getLessonsByCourseId(courseId);
+        }
+        
         const data = this.getData();
         return data ? data.lessons.filter(l => l.courseId === courseId) : [];
+    }
+    
+    // 모든 과목에 대해 강의 생성
+    async generateAllMissingLessons() {
+        if (this.useSupabase) {
+            return await this.supabaseManager.generateAllMissingLessons();
+        }
+        
+        console.log('localStorage 모드에서는 강의 자동 생성이 지원되지 않습니다.');
+        return false;
     }
 
     addLesson(lesson) {
@@ -338,7 +459,11 @@ class DataManager {
     }
 
     // User Courses
-    getUserCourses(userId) {
+    async getUserCourses(userId) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.getUserCourses(userId);
+        }
+        
         const data = this.getData();
         if (!data) return [];
 
@@ -350,8 +475,16 @@ class DataManager {
             });
     }
 
-    enrollUserInCourse(userId, courseId) {
+    async enrollUserInCourse(userId, courseId) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.enrollUserInCourse(userId, courseId);
+        }
+        
         const data = this.getData();
+        if (!data || !data.userCourses) {
+            throw new Error('데이터를 불러올 수 없습니다.');
+        }
+        
         const newId = Math.max(...data.userCourses.map(uc => uc.id), 0) + 1;
         
         const enrollment = {
@@ -367,7 +500,11 @@ class DataManager {
     }
 
     // User Progress
-    getUserProgress(userId) {
+    async getUserProgress(userId) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.getUserProgress(userId);
+        }
+        
         const data = this.getData();
         if (!data) return [];
 
@@ -380,7 +517,11 @@ class DataManager {
             });
     }
 
-    updateProgress(userId, lessonId, completed) {
+    async updateProgress(userId, lessonId, completed) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.updateProgress(userId, lessonId, completed);
+        }
+        
         const data = this.getData();
         let progressRecord = data.userProgress.find(up => 
             up.userId === userId && up.lessonId === lessonId
@@ -406,7 +547,11 @@ class DataManager {
     }
 
     // Dashboard data
-    getDashboardData() {
+    async getDashboardData() {
+        if (this.useSupabase) {
+            return await this.supabaseManager.getDashboardData();
+        }
+        
         const data = this.getData();
         if (!data) return { users: [], progressSummary: [] };
 
