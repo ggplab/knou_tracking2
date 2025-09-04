@@ -25,11 +25,6 @@
 
 **🔗 [https://knou.ggplab.xyz](https://knou.ggplab.xyz)**
 
-현재 등록된 테스트 학생:
-- **임정** (통계·데이터과학과) - 6과목 수강, 75% 진도
-- **최관수** (컴퓨터과학과) - 5과목 수강, 60% 진도  
-- **김서현** (컴퓨터과학과) - 3과목 수강, 40% 진도
-
 ## 🛠 기술 스택
 
 ### Frontend
@@ -175,12 +170,6 @@ knou_tracking2/
 - 🔗 LinkedIn: [https://www.linkedin.com/in/jayjunglim/](https://www.linkedin.com/in/jayjunglim/)
 - 📧 Email: contact@ggplab.xyz
 - 🌐 Website: [ggplab.xyz](https://ggplab.xyz)
-
-## 🙏 감사의 말
-
-- **방송통신대학교** - 실제 교육과정 데이터 참조
-- **GitHub Pages** - 무료 호스팅 서비스 제공
-- **Let's Encrypt** - 무료 SSL 인증서 제공
 
 ---
 
