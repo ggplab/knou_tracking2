@@ -9,11 +9,9 @@ class DataManager {
         if (!localStorage.getItem('knou-users')) {
             const sampleData = {
                 users: [
-                    { id: 1, name: '김학생', department: '통계·데이터', createdAt: new Date().toISOString() },
-                    { id: 2, name: '이학생', department: '컴퓨터', createdAt: new Date().toISOString() },
-                    { id: 3, name: '박학생', department: '통계·데이터', createdAt: new Date().toISOString() },
-                    { id: 4, name: '정학생', department: '컴퓨터', createdAt: new Date().toISOString() },
-                    { id: 5, name: '최학생', department: '통계·데이터', createdAt: new Date().toISOString() }
+                    { id: 1, name: '임정', department: '통계·데이터', createdAt: new Date().toISOString() },
+                    { id: 2, name: '최관수', department: '컴퓨터', createdAt: new Date().toISOString() },
+                    { id: 3, name: '김서현', department: '컴퓨터', createdAt: new Date().toISOString() }
                 ],
                 departments: [
                     { id: 1, name: '통계·데이터' },
@@ -107,19 +105,8 @@ class DataManager {
                     { id: 14, userId: 3, courseId: 4, enrolledAt: new Date().toISOString() },
                     { id: 15, userId: 3, courseId: 5, enrolledAt: new Date().toISOString() },
 
-                    { id: 16, userId: 4, courseId: 1, enrolledAt: new Date().toISOString() },
-                    { id: 17, userId: 4, courseId: 2, enrolledAt: new Date().toISOString() },
-                    { id: 18, userId: 4, courseId: 3, enrolledAt: new Date().toISOString() },
-                    { id: 19, userId: 4, courseId: 4, enrolledAt: new Date().toISOString() },
-                    { id: 20, userId: 4, courseId: 5, enrolledAt: new Date().toISOString() },
-
-                    { id: 21, userId: 5, courseId: 1, enrolledAt: new Date().toISOString() },
-                    { id: 22, userId: 5, courseId: 2, enrolledAt: new Date().toISOString() },
-                    { id: 23, userId: 5, courseId: 3, enrolledAt: new Date().toISOString() },
-                    { id: 24, userId: 5, courseId: 4, enrolledAt: new Date().toISOString() },
-                    { id: 25, userId: 5, courseId: 5, enrolledAt: new Date().toISOString() }
                 ],
-                userProgress: this.generateSampleProgress()
+                userProgress: this.generateRealProgress()
             };
 
             this.saveData(sampleData);
@@ -154,46 +141,38 @@ class DataManager {
         return lessons;
     }
 
-    generateSampleProgress() {
+    generateRealProgress() {
         const progress = [];
         let progressId = 1;
-        
-        // Get the lessons that were just generated
         const lessons = this.generateLessonsFromCourses();
 
-        // Generate different progress levels for each user
-        for (let userId = 1; userId <= 5; userId++) {
-            // Get user's courses based on department
-            const userCourseIds = userId <= 3 ? [1, 2, 3, 4, 5] : [11, 12, 13, 14, 15]; // Sample course assignment
-            
-            for (const courseId of userCourseIds) {
+        // Real user progress based on actual enrollment
+        const realEnrollments = [
+            // 임정 - 통계·데이터과학과 (6과목)
+            { userId: 1, courseIds: [4, 19, 21, 40, 39, 45], completionRate: 0.75 },
+            // 최관수 - 컴퓨터과학과 (5과목)  
+            { userId: 2, courseIds: [48, 53, 35, 38, 41], completionRate: 0.6 },
+            // 김서현 - 컴퓨터과학과 (3과목)
+            { userId: 3, courseIds: [53, 40, 52], completionRate: 0.4 }
+        ];
+
+        for (const enrollment of realEnrollments) {
+            for (const courseId of enrollment.courseIds) {
                 const courseLessons = lessons.filter(l => l.courseId === courseId);
                 const totalLessons = courseLessons.length;
+                const lessonsToComplete = Math.floor(totalLessons * enrollment.completionRate);
                 
-                // Generate different completion rates for variety
-                let completionRate;
-                switch (userId) {
-                    case 1: completionRate = 0.9; break;  // 90%
-                    case 2: completionRate = 0.75; break; // 75%
-                    case 3: completionRate = 0.6; break;  // 60%
-                    case 4: completionRate = 0.45; break; // 45%
-                    case 5: completionRate = 0.3; break;  // 30%
-                    default: completionRate = 0.5;
-                }
-
-                const lessonsToComplete = Math.floor(totalLessons * completionRate);
-                
-                // Mark lessons as completed
+                // Mark lessons as completed sequentially
                 for (let i = 0; i < totalLessons; i++) {
                     const lessonId = courseLessons[i].id;
                     const completed = i < lessonsToComplete;
                     
                     progress.push({
                         id: progressId++,
-                        userId,
+                        userId: enrollment.userId,
                         lessonId,
                         completed,
-                        completedAt: completed ? new Date().toISOString() : null
+                        completedAt: completed ? new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString() : null
                     });
                 }
             }
