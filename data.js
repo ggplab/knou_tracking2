@@ -86,25 +86,25 @@ class DataManager {
                 ],
                 lessons: this.generateLessonsFromCourses(),
                 userCourses: [
-                    // Each user enrolled in 5 courses (현실적인 과목 수)
-                    { id: 1, userId: 1, courseId: 1, enrolledAt: new Date().toISOString() },
-                    { id: 2, userId: 1, courseId: 2, enrolledAt: new Date().toISOString() },
-                    { id: 3, userId: 1, courseId: 3, enrolledAt: new Date().toISOString() },
-                    { id: 4, userId: 1, courseId: 4, enrolledAt: new Date().toISOString() },
-                    { id: 5, userId: 1, courseId: 5, enrolledAt: new Date().toISOString() },
+                    // 임정 (통계·데이터과학과) - 6과목
+                    { id: 1, userId: 1, courseId: 4, enrolledAt: new Date().toISOString() },  // 원격대학교육의이해
+                    { id: 2, userId: 1, courseId: 19, enrolledAt: new Date().toISOString() }, // 바이오통계학
+                    { id: 3, userId: 1, courseId: 21, enrolledAt: new Date().toISOString() }, // 수리통계학
+                    { id: 4, userId: 1, courseId: 40, enrolledAt: new Date().toISOString() }, // 선형대수
+                    { id: 5, userId: 1, courseId: 39, enrolledAt: new Date().toISOString() }, // 자료구조
+                    { id: 6, userId: 1, courseId: 45, enrolledAt: new Date().toISOString() }, // 컴퓨터구조
 
-                    { id: 6, userId: 2, courseId: 1, enrolledAt: new Date().toISOString() },
-                    { id: 7, userId: 2, courseId: 2, enrolledAt: new Date().toISOString() },
-                    { id: 8, userId: 2, courseId: 3, enrolledAt: new Date().toISOString() },
-                    { id: 9, userId: 2, courseId: 4, enrolledAt: new Date().toISOString() },
-                    { id: 10, userId: 2, courseId: 5, enrolledAt: new Date().toISOString() },
+                    // 최관수 (컴퓨터과학과) - 5과목
+                    { id: 7, userId: 2, courseId: 48, enrolledAt: new Date().toISOString() }, // 시뮬레이션
+                    { id: 8, userId: 2, courseId: 53, enrolledAt: new Date().toISOString() }, // 컴파일러구성
+                    { id: 9, userId: 2, courseId: 35, enrolledAt: new Date().toISOString() }, // C프로그래밍
+                    { id: 10, userId: 2, courseId: 38, enrolledAt: new Date().toISOString() }, // 오픈소스기반데이터분석
+                    { id: 11, userId: 2, courseId: 41, enrolledAt: new Date().toISOString() }, // 프로그래밍언어론
 
-                    { id: 11, userId: 3, courseId: 1, enrolledAt: new Date().toISOString() },
-                    { id: 12, userId: 3, courseId: 2, enrolledAt: new Date().toISOString() },
-                    { id: 13, userId: 3, courseId: 3, enrolledAt: new Date().toISOString() },
-                    { id: 14, userId: 3, courseId: 4, enrolledAt: new Date().toISOString() },
-                    { id: 15, userId: 3, courseId: 5, enrolledAt: new Date().toISOString() },
-
+                    // 김서현 (컴퓨터과학과) - 3과목
+                    { id: 12, userId: 3, courseId: 53, enrolledAt: new Date().toISOString() }, // 컴파일러구성
+                    { id: 13, userId: 3, courseId: 40, enrolledAt: new Date().toISOString() }, // 선형대수
+                    { id: 14, userId: 3, courseId: 52, enrolledAt: new Date().toISOString() }  // 클라우드컴퓨팅
                 ],
                 userProgress: this.generateRealProgress()
             };
