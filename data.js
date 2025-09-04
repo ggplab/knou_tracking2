@@ -1,17 +1,58 @@
-// Mock data for KNOU tracking system
+// KNOU tracking system data manager with Supabase support
 class DataManager {
     constructor() {
+        this.useSupabase = false;
+        this.supabaseManager = null;
+        this.initialized = false;
+        this.initializeDataManager();
+    }
+
+    async initializeDataManager() {
+        // Supabase 사용 가능한지 확인
+        try {
+            if (typeof supabaseConfig !== 'undefined' && supabaseConfig.initialized) {
+                this.supabaseManager = new SupabaseDataManager();
+                await this.supabaseManager.init();
+                
+                if (this.supabaseManager.initialized && !this.supabaseManager.fallbackToLocalStorage) {
+                    this.useSupabase = true;
+                    console.log('✅ Supabase 모드로 실행');
+                    
+                    // Supabase 연결 성공 시 기존 localStorage 데이터 정리
+                    if (localStorage.getItem('knou-users')) {
+                        console.log('🧹 기존 localStorage 데이터 정리 중...');
+                        localStorage.removeItem('knou-users');
+                    }
+                    this.initialized = true;
+                    return;
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ Supabase 초기화 실패, LocalStorage로 폴백:', error);
+        }
+
+        // LocalStorage 모드로 폴백
+        console.log('📦 LocalStorage 모드로 실행');
+        this.useSupabase = false;
         this.initializeData();
+        this.initialized = true;
     }
 
     initializeData() {
-        // Initialize with sample data if not exists
+        // Supabase를 사용하는 경우 localStorage 샘플 데이터는 불필요
+        if (this.useSupabase) {
+            return;
+        }
+        
+        // LocalStorage 모드에서만 샘플 데이터 초기화
         if (!localStorage.getItem('knou-users')) {
             const sampleData = {
                 users: [
-                    { id: 1, name: '임정', department: '통계·데이터', createdAt: new Date().toISOString() },
-                    { id: 2, name: '최관수', department: '컴퓨터', createdAt: new Date().toISOString() },
-                    { id: 3, name: '김서현', department: '컴퓨터', createdAt: new Date().toISOString() }
+                    { id: 1, name: '김학생', department: '통계·데이터', createdAt: new Date().toISOString() },
+                    { id: 2, name: '이학생', department: '컴퓨터', createdAt: new Date().toISOString() },
+                    { id: 3, name: '박학생', department: '통계·데이터', createdAt: new Date().toISOString() },
+                    { id: 4, name: '정학생', department: '컴퓨터', createdAt: new Date().toISOString() },
+                    { id: 5, name: '최학생', department: '통계·데이터', createdAt: new Date().toISOString() }
                 ],
                 departments: [
                     { id: 1, name: '통계·데이터' },
@@ -86,27 +127,38 @@ class DataManager {
                 ],
                 lessons: this.generateLessonsFromCourses(),
                 userCourses: [
-                    // 임정 (통계·데이터과학과) - 6과목
-                    { id: 1, userId: 1, courseId: 4, enrolledAt: new Date().toISOString() },  // 원격대학교육의이해
-                    { id: 2, userId: 1, courseId: 19, enrolledAt: new Date().toISOString() }, // 바이오통계학
-                    { id: 3, userId: 1, courseId: 21, enrolledAt: new Date().toISOString() }, // 수리통계학
-                    { id: 4, userId: 1, courseId: 40, enrolledAt: new Date().toISOString() }, // 선형대수
-                    { id: 5, userId: 1, courseId: 39, enrolledAt: new Date().toISOString() }, // 자료구조
-                    { id: 6, userId: 1, courseId: 45, enrolledAt: new Date().toISOString() }, // 컴퓨터구조
+                    // Each user enrolled in 5 courses (현실적인 과목 수)
+                    { id: 1, userId: 1, courseId: 1, enrolledAt: new Date().toISOString() },
+                    { id: 2, userId: 1, courseId: 2, enrolledAt: new Date().toISOString() },
+                    { id: 3, userId: 1, courseId: 3, enrolledAt: new Date().toISOString() },
+                    { id: 4, userId: 1, courseId: 4, enrolledAt: new Date().toISOString() },
+                    { id: 5, userId: 1, courseId: 5, enrolledAt: new Date().toISOString() },
 
-                    // 최관수 (컴퓨터과학과) - 5과목
-                    { id: 7, userId: 2, courseId: 48, enrolledAt: new Date().toISOString() }, // 시뮬레이션
-                    { id: 8, userId: 2, courseId: 53, enrolledAt: new Date().toISOString() }, // 컴파일러구성
-                    { id: 9, userId: 2, courseId: 35, enrolledAt: new Date().toISOString() }, // C프로그래밍
-                    { id: 10, userId: 2, courseId: 38, enrolledAt: new Date().toISOString() }, // 오픈소스기반데이터분석
-                    { id: 11, userId: 2, courseId: 41, enrolledAt: new Date().toISOString() }, // 프로그래밍언어론
+                    { id: 6, userId: 2, courseId: 1, enrolledAt: new Date().toISOString() },
+                    { id: 7, userId: 2, courseId: 2, enrolledAt: new Date().toISOString() },
+                    { id: 8, userId: 2, courseId: 3, enrolledAt: new Date().toISOString() },
+                    { id: 9, userId: 2, courseId: 4, enrolledAt: new Date().toISOString() },
+                    { id: 10, userId: 2, courseId: 5, enrolledAt: new Date().toISOString() },
 
-                    // 김서현 (컴퓨터과학과) - 3과목
-                    { id: 12, userId: 3, courseId: 53, enrolledAt: new Date().toISOString() }, // 컴파일러구성
-                    { id: 13, userId: 3, courseId: 40, enrolledAt: new Date().toISOString() }, // 선형대수
-                    { id: 14, userId: 3, courseId: 52, enrolledAt: new Date().toISOString() }  // 클라우드컴퓨팅
+                    { id: 11, userId: 3, courseId: 1, enrolledAt: new Date().toISOString() },
+                    { id: 12, userId: 3, courseId: 2, enrolledAt: new Date().toISOString() },
+                    { id: 13, userId: 3, courseId: 3, enrolledAt: new Date().toISOString() },
+                    { id: 14, userId: 3, courseId: 4, enrolledAt: new Date().toISOString() },
+                    { id: 15, userId: 3, courseId: 5, enrolledAt: new Date().toISOString() },
+
+                    { id: 16, userId: 4, courseId: 1, enrolledAt: new Date().toISOString() },
+                    { id: 17, userId: 4, courseId: 2, enrolledAt: new Date().toISOString() },
+                    { id: 18, userId: 4, courseId: 3, enrolledAt: new Date().toISOString() },
+                    { id: 19, userId: 4, courseId: 4, enrolledAt: new Date().toISOString() },
+                    { id: 20, userId: 4, courseId: 5, enrolledAt: new Date().toISOString() },
+
+                    { id: 21, userId: 5, courseId: 1, enrolledAt: new Date().toISOString() },
+                    { id: 22, userId: 5, courseId: 2, enrolledAt: new Date().toISOString() },
+                    { id: 23, userId: 5, courseId: 3, enrolledAt: new Date().toISOString() },
+                    { id: 24, userId: 5, courseId: 4, enrolledAt: new Date().toISOString() },
+                    { id: 25, userId: 5, courseId: 5, enrolledAt: new Date().toISOString() }
                 ],
-                userProgress: this.generateRealProgress()
+                userProgress: this.generateSampleProgress()
             };
 
             this.saveData(sampleData);
@@ -141,38 +193,46 @@ class DataManager {
         return lessons;
     }
 
-    generateRealProgress() {
+    generateSampleProgress() {
         const progress = [];
         let progressId = 1;
+        
+        // Get the lessons that were just generated
         const lessons = this.generateLessonsFromCourses();
 
-        // Real user progress based on actual enrollment
-        const realEnrollments = [
-            // 임정 - 통계·데이터과학과 (6과목)
-            { userId: 1, courseIds: [4, 19, 21, 40, 39, 45], completionRate: 0.75 },
-            // 최관수 - 컴퓨터과학과 (5과목)  
-            { userId: 2, courseIds: [48, 53, 35, 38, 41], completionRate: 0.6 },
-            // 김서현 - 컴퓨터과학과 (3과목)
-            { userId: 3, courseIds: [53, 40, 52], completionRate: 0.4 }
-        ];
-
-        for (const enrollment of realEnrollments) {
-            for (const courseId of enrollment.courseIds) {
+        // Generate different progress levels for each user
+        for (let userId = 1; userId <= 5; userId++) {
+            // Get user's courses based on department
+            const userCourseIds = userId <= 3 ? [1, 2, 3, 4, 5] : [11, 12, 13, 14, 15]; // Sample course assignment
+            
+            for (const courseId of userCourseIds) {
                 const courseLessons = lessons.filter(l => l.courseId === courseId);
                 const totalLessons = courseLessons.length;
-                const lessonsToComplete = Math.floor(totalLessons * enrollment.completionRate);
                 
-                // Mark lessons as completed sequentially
+                // Generate different completion rates for variety
+                let completionRate;
+                switch (userId) {
+                    case 1: completionRate = 0.9; break;  // 90%
+                    case 2: completionRate = 0.75; break; // 75%
+                    case 3: completionRate = 0.6; break;  // 60%
+                    case 4: completionRate = 0.45; break; // 45%
+                    case 5: completionRate = 0.3; break;  // 30%
+                    default: completionRate = 0.5;
+                }
+
+                const lessonsToComplete = Math.floor(totalLessons * completionRate);
+                
+                // Mark lessons as completed
                 for (let i = 0; i < totalLessons; i++) {
                     const lessonId = courseLessons[i].id;
                     const completed = i < lessonsToComplete;
                     
                     progress.push({
                         id: progressId++,
-                        userId: enrollment.userId,
+                        userId,
                         lessonId,
                         completed,
-                        completedAt: completed ? new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString() : null
+                        completedAt: completed ? new Date().toISOString() : null
                     });
                 }
             }
@@ -208,8 +268,20 @@ class DataManager {
 
     // Data access methods
     getData() {
+        // Supabase 모드에서는 localStorage를 사용하지 않음
+        if (this.useSupabase) {
+            return null;
+        }
+        
         const data = localStorage.getItem('knou-users');
-        return data ? JSON.parse(data) : null;
+        if (data) {
+            return JSON.parse(data);
+        } else {
+            // 데이터가 없으면 초기화하고 반환
+            this.initializeData();
+            const newData = localStorage.getItem('knou-users');
+            return JSON.parse(newData);
+        }
     }
 
     saveData(data) {
@@ -217,12 +289,20 @@ class DataManager {
     }
 
     // Users
-    getUsers() {
+    async getUsers() {
+        if (this.useSupabase) {
+            return await this.supabaseManager.getUsers();
+        }
+        
         const data = this.getData();
         return data ? data.users : [];
     }
 
-    addUser(user) {
+    async addUser(user) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.addUser(user);
+        }
+        
         const data = this.getData();
         const newId = Math.max(...data.users.map(u => u.id), 0) + 1;
         const newUser = {
@@ -236,7 +316,11 @@ class DataManager {
         return newUser;
     }
 
-    deleteUser(userId) {
+    async deleteUser(userId) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.deleteUser(userId);
+        }
+        
         const data = this.getData();
         data.users = data.users.filter(u => u.id !== userId);
         data.userCourses = data.userCourses.filter(uc => uc.userId !== userId);
@@ -245,12 +329,30 @@ class DataManager {
     }
 
     // Courses
-    getCourses() {
+    async getCourses() {
+        if (this.useSupabase) {
+            const courses = await this.supabaseManager.getCourses();
+            // 속성명을 JavaScript 코드에서 기대하는 형식으로 변환
+            return courses.map(course => ({
+                id: course.id,
+                courseCode: course.course_code,
+                courseName: course.course_name,
+                department: course.department,
+                grade: course.grade,
+                lessonCount: course.lesson_count,
+                createdAt: course.created_at || new Date().toISOString()
+            }));
+        }
+        
         const data = this.getData();
         return data ? data.courses : [];
     }
 
-    addCourse(course) {
+    async addCourse(course) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.addCourse(course);
+        }
+        
         const data = this.getData();
         const newId = Math.max(...data.courses.map(c => c.id), 0) + 1;
         const newCourse = {
@@ -280,24 +382,64 @@ class DataManager {
 
     // Departments
     getDepartments() {
+        if (this.useSupabase) {
+            // Supabase에서는 고정된 학과 정보 반환
+            return [
+                { id: 1, name: '통계·데이터' },
+                { id: 2, name: '컴퓨터' }
+            ];
+        }
+        
         const data = this.getData();
         return data ? data.departments : [];
     }
 
-    getCoursesByDepartment(department) {
+    async getCoursesByDepartment(department) {
+        if (this.useSupabase) {
+            const courses = await this.supabaseManager.getCoursesByDepartment(department);
+            // 속성명을 JavaScript 코드에서 기대하는 형식으로 변환
+            return courses.map(course => ({
+                id: course.id,
+                courseCode: course.course_code,
+                courseName: course.course_name,
+                department: course.department,
+                grade: course.grade,
+                lessonCount: course.lesson_count,
+                createdAt: course.created_at || new Date().toISOString()
+            }));
+        }
+        
         const data = this.getData();
         return data ? data.courses.filter(c => c.department === department) : [];
     }
 
     // Lessons
-    getLessons() {
+    async getLessons() {
+        if (this.useSupabase) {
+            return await this.supabaseManager.getLessons();
+        }
+        
         const data = this.getData();
         return data ? data.lessons : [];
     }
 
-    getLessonsByCourseId(courseId) {
+    async getLessonsByCourseId(courseId) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.getLessonsByCourseId(courseId);
+        }
+        
         const data = this.getData();
         return data ? data.lessons.filter(l => l.courseId === courseId) : [];
+    }
+    
+    // 모든 과목에 대해 강의 생성
+    async generateAllMissingLessons() {
+        if (this.useSupabase) {
+            return await this.supabaseManager.generateAllMissingLessons();
+        }
+        
+        console.log('localStorage 모드에서는 강의 자동 생성이 지원되지 않습니다.');
+        return false;
     }
 
     addLesson(lesson) {
@@ -317,7 +459,11 @@ class DataManager {
     }
 
     // User Courses
-    getUserCourses(userId) {
+    async getUserCourses(userId) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.getUserCourses(userId);
+        }
+        
         const data = this.getData();
         if (!data) return [];
 
@@ -329,8 +475,16 @@ class DataManager {
             });
     }
 
-    enrollUserInCourse(userId, courseId) {
+    async enrollUserInCourse(userId, courseId) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.enrollUserInCourse(userId, courseId);
+        }
+        
         const data = this.getData();
+        if (!data || !data.userCourses) {
+            throw new Error('데이터를 불러올 수 없습니다.');
+        }
+        
         const newId = Math.max(...data.userCourses.map(uc => uc.id), 0) + 1;
         
         const enrollment = {
@@ -346,7 +500,11 @@ class DataManager {
     }
 
     // User Progress
-    getUserProgress(userId) {
+    async getUserProgress(userId) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.getUserProgress(userId);
+        }
+        
         const data = this.getData();
         if (!data) return [];
 
@@ -359,7 +517,11 @@ class DataManager {
             });
     }
 
-    updateProgress(userId, lessonId, completed) {
+    async updateProgress(userId, lessonId, completed) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.updateProgress(userId, lessonId, completed);
+        }
+        
         const data = this.getData();
         let progressRecord = data.userProgress.find(up => 
             up.userId === userId && up.lessonId === lessonId
@@ -385,7 +547,11 @@ class DataManager {
     }
 
     // Dashboard data
-    getDashboardData() {
+    async getDashboardData() {
+        if (this.useSupabase) {
+            return await this.supabaseManager.getDashboardData();
+        }
+        
         const data = this.getData();
         if (!data) return { users: [], progressSummary: [] };
 
@@ -442,3 +608,142 @@ class DataManager {
 
 // Create global instance
 const dataManager = new DataManager();
+
+// Supabase 데이터 관리 클래스 (별도 파일로 분리 가능)
+class SupabaseDataManager {
+    constructor() {
+        this.supabase = null;
+        this.initialized = false;
+        this.fallbackToLocalStorage = false;
+    }
+
+    async init() {
+        try {
+            if (typeof supabase !== 'undefined' && supabase.createClient) {
+                this.supabase = supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey);
+                
+                // 연결 테스트
+                const { data, error } = await this.supabase.from('users').select('id').limit(1);
+                if (error) {
+                    throw new Error(`Supabase 연결 테스트 실패: ${error.message}`);
+                }
+                
+                this.initialized = true;
+                console.log('🚀 Supabase 연결 성공');
+            } else {
+                throw new Error('Supabase 클라이언트가 정의되지 않았습니다.');
+            }
+        } catch (error) {
+            console.error(error.message);
+            this.fallbackToLocalStorage = true;
+            this.initialized = false;
+        }
+    }
+
+    async getUsers() {
+        const { data, error } = await this.supabase.from('users').select('*');
+        if (error) throw error;
+        return data;
+    }
+
+    async addUser(user) {
+        const { data, error } = await this.supabase.from('users').insert([{ name: user.name, department: user.department }]).select();
+        if (error) throw error;
+        return data[0];
+    }
+
+    async deleteUser(userId) {
+        const { error } = await this.supabase.from('users').delete().eq('id', userId);
+        if (error) throw error;
+    }
+
+    async getCourses() {
+        const { data, error } = await this.supabase.from('courses').select('*');
+        if (error) throw error;
+        return data;
+    }
+
+    async addCourse(course) {
+        const { data, error } = await this.supabase.from('courses').insert([{ 
+            course_code: course.courseCode, 
+            course_name: course.courseName,
+            department: course.department,
+            lesson_count: course.lessonCount
+        }]).select();
+        if (error) throw error;
+        return data[0];
+    }
+
+    async getCoursesByDepartment(department) {
+        const { data, error } = await this.supabase.from('courses').select('*').eq('department', department);
+        if (error) throw error;
+        return data;
+    }
+
+    async getLessons() {
+        const { data, error } = await this.supabase.from('lessons').select('*');
+        if (error) throw error;
+        return data;
+    }
+
+    async getLessonsByCourseId(courseId) {
+        const { data, error } = await this.supabase.from('lessons').select('*').eq('course_id', courseId);
+        if (error) throw error;
+        return data;
+    }
+
+    async addLesson(lesson) {
+        const { data, error } = await this.supabase.from('lessons').insert([{ 
+            course_id: lesson.courseId, 
+            lesson_name: lesson.lessonName 
+        }]).select();
+        if (error) throw error;
+        return data[0];
+    }
+
+    async getUserCourses(userId) {
+        const { data, error } = await this.supabase
+            .from('user_courses')
+            .select('*, courses(*)')
+            .eq('user_id', userId);
+        if (error) throw error;
+        return data;
+    }
+
+    async enrollUserInCourse(userId, courseId) {
+        const { data, error } = await this.supabase.from('user_courses').insert([{ user_id: userId, course_id: courseId }]).select();
+        if (error) throw error;
+        return data[0];
+    }
+
+    async getUserProgress(userId) {
+        const { data, error } = await this.supabase.from('user_progress').select('*').eq('user_id', userId);
+        if (error) throw error;
+        return data;
+    }
+
+    async updateProgress(userId, lessonId, completed) {
+        const { data, error } = await this.supabase
+            .from('user_progress')
+            .upsert({ user_id: userId, lesson_id: lessonId, completed }, { onConflict: 'user_id, lesson_id' })
+            .select();
+        if (error) throw error;
+        return data[0];
+    }
+
+    async getDashboardData() {
+        const { data, error } = await this.supabase.rpc('get_dashboard_data');
+        if (error) throw error;
+        return data[0];
+    }
+    
+    async generateAllMissingLessons() {
+        const { data, error } = await this.supabase.rpc('generate_all_missing_lessons');
+        if (error) {
+            console.error('강의 자동 생성 실패:', error);
+            return false;
+        }
+        console.log('강의 자동 생성 결과:', data);
+        return data;
+    }
+}
