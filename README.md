@@ -14,10 +14,11 @@
 - **과목별 강의 체크리스트**로 세부 진도 관리
 
 ### 핵심 특징
-- ✅ **개인 중심 설계**: 각 학생의 개별 진도 관리에 특화
+- ✅ **개인 중심 설계**: 각 학생의 개별 진도 관리에 특화 (순위 경쟁 없는 협력적 환경)
 - ✅ **실시간 업데이트**: 체크박스 클릭 시 즉시 진도율 반영
 - ✅ **시각적 피드백**: 색상 코딩으로 진도율 구간 구분
 - ✅ **반응형 디자인**: 데스크톱과 모바일에서 완벽 지원
+- ✅ **고성능 최적화**: 데이터베이스 인덱싱과 캐싱으로 빠른 로딩 속도
 - ✅ **로그인 불필요**: 브라우저 로컬 저장소 활용
 - ✅ **실제 교육과정 반영**: 2025년 2학기 정식 과목 데이터
 
@@ -119,6 +120,32 @@ php -S localhost:8000
 - ✅ **Safari** (Latest)
 - ✅ **Edge** (Latest)
 - ⚠️ **Internet Explorer** (미지원)
+
+## 🚀 GitHub Pages 배포
+
+### 자동 배포 설정
+이 프로젝트는 GitHub Pages를 통해 자동 배포됩니다:
+
+- **배포 URL**: `https://yourusername.github.io/knou_tracking2/`
+- **배포 브랜치**: `main`  
+- **배포 트리거**: Push to main branch
+
+### 로컬 개발 서버
+```bash
+# Python 서버 (Python 3.x)
+python -m http.server 8000
+
+# Node.js 서버
+npx serve .
+
+# 브라우저에서 접속
+http://localhost:8000
+```
+
+### 성능 최적화 가이드
+- 📋 **데이터베이스 인덱스**: [`INDEX_GUIDE.md`](INDEX_GUIDE.md)
+- 🚀 **성능 테스트**: [`PERFORMANCE_TEST.md`](PERFORMANCE_TEST.md)  
+- 🔧 **배포 가이드**: [`DEPLOY_GUIDE.md`](DEPLOY_GUIDE.md)
 
 ## 🔧 개발 정보
 

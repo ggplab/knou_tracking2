@@ -17,6 +17,11 @@ class SupabaseConfig {
 
     // Supabase 클라이언트 초기화
     initialize() {
+        console.log('🔍 SupabaseConfig.initialize() 시작');
+        console.log('🔍 SUPABASE_URL:', this.SUPABASE_URL);
+        console.log('🔍 SUPABASE_ANON_KEY 길이:', this.SUPABASE_ANON_KEY?.length);
+        console.log('🔍 supabase 전역 객체:', typeof supabase);
+        
         try {
             // 환경변수가 설정되지 않은 경우 경고
             if (this.SUPABASE_URL === 'SUPABASE_URL' || this.SUPABASE_ANON_KEY === 'SUPABASE_API') {
@@ -24,12 +29,22 @@ class SupabaseConfig {
                 return false;
             }
 
+            // supabase 전역 객체가 로드되었는지 확인
+            if (typeof supabase === 'undefined') {
+                console.error('❌ Supabase 라이브러리가 로드되지 않았습니다.');
+                return false;
+            }
+
+            console.log('🔍 supabase.createClient 호출 중...');
             this.supabase = supabase.createClient(this.SUPABASE_URL, this.SUPABASE_ANON_KEY);
+            console.log('🔍 Supabase 클라이언트 생성됨:', this.supabase);
+            
             this.initialized = true;
             console.log('✅ Supabase 클라이언트 초기화 완료');
             return true;
         } catch (error) {
             console.error('❌ Supabase 초기화 실패:', error);
+            console.error('❌ 오류 스택:', error.stack);
             return false;
         }
     }
@@ -87,3 +102,6 @@ console.log(`
    - user_courses (id, user_id, course_id, enrolled_at)
    - user_progress (id, user_id, lesson_id, completed, completed_at)
 `);
+
+// 자동으로 Supabase 초기화
+supabaseConfig.initialize();

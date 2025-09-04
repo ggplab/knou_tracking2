@@ -11,9 +11,10 @@
     <div id="app">
         <header class="header">
             <div class="container">
-                <h1 class="logo">📚 KNOU Tracker</h1>
+                <h1 class="logo" onclick="showPage('dashboard')" style="cursor: pointer;">📚 KNOU Tracker</h1>
                 <nav class="nav">
                     <a href="#dashboard" class="nav-link active" data-page="dashboard">대시보드</a>
+                    <a href="#student" class="nav-link" data-page="student">개인 현황</a>
                     <a href="#register" class="nav-link" data-page="register">신규 등록</a>
                     <a href="#admin" class="nav-link" data-page="admin">관리</a>
                 </nav>
@@ -40,6 +41,39 @@
                     
                     <div class="student-grid" id="student-grid">
                         <!-- Student cards will be populated here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Student Progress Page (개인 현황) -->
+            <div id="student-page" class="page">
+                <div class="container">
+                    <div class="student-header">
+                        <div class="student-selector">
+                            <label for="student-select">학습자 선택:</label>
+                            <select id="student-select" onchange="app.loadStudentProgress(this.value)">
+                                <option value="">학습자를 선택하세요</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="student-progress-content" class="student-progress-content" style="display: none;">
+                        <div class="student-info-header-inline">
+                            <div class="student-inline-info">
+                                <h2 id="selected-student-name">학생 이름</h2>
+                                <span id="selected-student-department" class="department-badge-inline">학과</span>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar-horizontal">
+                                    <div id="progress-bar-fill" class="progress-bar-fill"></div>
+                                </div>
+                                <span id="overall-progress-percentage" class="progress-percentage-inline">0%</span>
+                            </div>
+                        </div>
+
+                        <div class="courses-grid" id="courses-grid">
+                            <!-- Course cards will be populated here -->
+                        </div>
                     </div>
                 </div>
             </div>
@@ -84,8 +118,9 @@
                     <div class="register-form-container">
                         <form id="register-form" class="register-form">
                             <div class="form-group">
-                                <label for="register-name">이름 *</label>
-                                <input type="text" id="register-name" name="name" required placeholder="이름을 입력하세요">
+                                <label for="register-name">닉네임 *</label>
+                                <input type="text" id="register-name" name="name" required placeholder="닉네임을 입력하세요" onblur="app.checkNicknameDuplicate(this.value)">
+                                <div id="nickname-validation" class="validation-message"></div>
                             </div>
 
                             <div class="form-group">
@@ -142,35 +177,37 @@
                     <!-- Courses Tab -->
                     <div id="admin-courses" class="admin-tab">
                         <div class="admin-section">
-                            <h3>새 과목 추가</h3>
-                            <form id="add-course-form" class="form">
-                                <input type="text" id="course-code" placeholder="과목 코드 (예: CS101)" required>
-                                <input type="text" id="course-name" placeholder="과목명" required>
-                                <select id="course-department" required>
-                                    <option value="">학과 선택</option>
-                                    <option value="통계·데이터">통계·데이터</option>
-                                    <option value="컴퓨터">컴퓨터</option>
-                                </select>
-                                <input type="number" id="course-lesson-count" placeholder="수업수" min="1" max="20" value="15" required>
-                                <button type="submit">추가</button>
-                            </form>
-                        </div>
-
-                        <div class="admin-section">
-                            <h3>강의 추가</h3>
-                            <form id="add-lesson-form" class="form">
-                                <select id="lesson-course-select" required>
-                                    <option value="">과목 선택</option>
-                                </select>
-                                <input type="text" id="lesson-name" placeholder="강의명" required>
-                                <button type="submit">강의 추가</button>
-                            </form>
-                        </div>
-
-                        <div class="admin-section">
-                            <h3>과목별 강의 목록</h3>
-                            <div id="course-tree" class="course-tree">
-                                <!-- Course tree will be populated here -->
+                            <h3>학생별 수강 과목 관리</h3>
+                            <div class="student-course-management">
+                                <div class="student-selection">
+                                    <label for="manage-student-select">학생 선택:</label>
+                                    <select id="manage-student-select" onchange="app.loadStudentCourses(this.value)">
+                                        <option value="">학생을 선택하세요</option>
+                                    </select>
+                                </div>
+                                
+                                <div id="student-course-content" class="student-course-content" style="display: none;">
+                                    <div class="current-courses-section">
+                                        <h4>현재 수강 중인 과목</h4>
+                                        <div id="current-courses-list" class="course-management-list">
+                                            <!-- Current courses will be populated here -->
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="available-courses-section">
+                                        <h4>추가 가능한 과목</h4>
+                                        <div class="course-filter">
+                                            <select id="available-course-department">
+                                                <option value="">모든 학과</option>
+                                                <option value="통계·데이터">통계·데이터</option>
+                                                <option value="컴퓨터">컴퓨터</option>
+                                            </select>
+                                        </div>
+                                        <div id="available-courses-list" class="course-management-list">
+                                            <!-- Available courses will be populated here -->
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -197,9 +234,8 @@
         </footer>
     </div>
 
-    <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase-data.js"></script>
+    <script src="config.js"></script>
     <script src="data.js"></script>
     <script src="app.js"></script>
 </body>

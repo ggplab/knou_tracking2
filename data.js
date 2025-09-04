@@ -9,10 +9,21 @@ class DataManager {
 
     async initializeDataManager() {
         // Supabase 사용 가능한지 확인
+        console.log('🔍 DataManager 초기화 시작...');
+        console.log('🔍 supabaseConfig 존재:', typeof supabaseConfig !== 'undefined');
+        console.log('🔍 supabaseConfig.initialized:', supabaseConfig?.initialized);
+        
         try {
             if (typeof supabaseConfig !== 'undefined' && supabaseConfig.initialized) {
+                console.log('🔍 SupabaseDataManager 생성 중...');
                 this.supabaseManager = new SupabaseDataManager();
+                console.log('🔍 SupabaseDataManager 초기화 중...');
                 await this.supabaseManager.init();
+                
+                console.log('🔍 SupabaseDataManager 상태:', {
+                    initialized: this.supabaseManager.initialized,
+                    fallbackToLocalStorage: this.supabaseManager.fallbackToLocalStorage
+                });
                 
                 if (this.supabaseManager.initialized && !this.supabaseManager.fallbackToLocalStorage) {
                     this.useSupabase = true;
@@ -25,10 +36,14 @@ class DataManager {
                     }
                     this.initialized = true;
                     return;
+                } else {
+                    console.log('⚠️ SupabaseDataManager 초기화 실패, LocalStorage로 폴백');
                 }
+            } else {
+                console.log('⚠️ supabaseConfig가 없거나 초기화되지 않음');
             }
         } catch (error) {
-            console.warn('⚠️ Supabase 초기화 실패, LocalStorage로 폴백:', error);
+            console.error('❌ Supabase 초기화 중 예외 발생:', error);
         }
 
         // LocalStorage 모드로 폴백
@@ -298,6 +313,15 @@ class DataManager {
         return data ? data.users : [];
     }
 
+    async getUser(userId) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.getUser(userId);
+        }
+        
+        const data = this.getData();
+        return data ? data.users.find(user => user.id === parseInt(userId)) : null;
+    }
+
     async addUser(user) {
         if (this.useSupabase) {
             return await this.supabaseManager.addUser(user);
@@ -431,6 +455,11 @@ class DataManager {
         const data = this.getData();
         return data ? data.lessons.filter(l => l.courseId === courseId) : [];
     }
+
+    async getCourseLessons(courseId) {
+        // getCourseLessons는 getLessonsByCourseId와 동일한 역할
+        return await this.getLessonsByCourseId(courseId);
+    }
     
     // 모든 과목에 대해 강의 생성
     async generateAllMissingLessons() {
@@ -499,6 +528,37 @@ class DataManager {
         return enrollment;
     }
 
+    async unenrollUserFromCourse(userId, courseId) {
+        if (this.useSupabase) {
+            return await this.supabaseManager.unenrollUserFromCourse(userId, courseId);
+        }
+        
+        const data = this.getData();
+        if (!data) {
+            throw new Error('데이터를 불러올 수 없습니다.');
+        }
+        
+        // user_courses에서 해당 등록 정보 삭제
+        if (data.userCourses) {
+            data.userCourses = data.userCourses.filter(uc => 
+                !(uc.userId === userId && uc.courseId === courseId)
+            );
+        }
+        
+        // user_progress에서 해당 과목의 모든 진도 정보 삭제
+        if (data.userProgress) {
+            const lessons = data.lessons.filter(l => l.courseId === courseId);
+            const lessonIds = lessons.map(l => l.id);
+            
+            data.userProgress = data.userProgress.filter(up => 
+                !(up.userId === userId && lessonIds.includes(up.lessonId))
+            );
+        }
+        
+        this.saveData(data);
+        return true;
+    }
+
     // User Progress
     async getUserProgress(userId) {
         if (this.useSupabase) {
@@ -544,6 +604,11 @@ class DataManager {
 
         this.saveData(data);
         return progressRecord;
+    }
+
+    async updateUserProgress(userId, lessonId, completed) {
+        // updateUserProgress는 updateProgress와 동일한 역할
+        return await this.updateProgress(userId, lessonId, completed);
     }
 
     // Dashboard data
@@ -606,10 +671,7 @@ class DataManager {
     }
 }
 
-// Create global instance
-const dataManager = new DataManager();
-
-// Supabase 데이터 관리 클래스 (별도 파일로 분리 가능)
+// Supabase 데이터 관리 클래스
 class SupabaseDataManager {
     constructor() {
         this.supabase = null;
@@ -618,111 +680,148 @@ class SupabaseDataManager {
     }
 
     async init() {
+        console.log('🔍 SupabaseDataManager.init() 시작');
+        console.log('🔍 supabaseConfig:', supabaseConfig);
+        console.log('🔍 supabaseConfig.initialized:', supabaseConfig?.initialized);
+        
         try {
-            if (typeof supabase !== 'undefined' && supabase.createClient) {
-                this.supabase = supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey);
-                
-                // 연결 테스트
-                const { data, error } = await this.supabase.from('users').select('id').limit(1);
-                if (error) {
-                    throw new Error(`Supabase 연결 테스트 실패: ${error.message}`);
-                }
-                
-                this.initialized = true;
-                console.log('🚀 Supabase 연결 성공');
-            } else {
-                throw new Error('Supabase 클라이언트가 정의되지 않았습니다.');
+            if (typeof supabaseConfig === 'undefined' || !supabaseConfig.initialized) {
+                console.log('⚠️ Supabase 설정이 없어 LocalStorage 모드로 실행합니다.');
+                this.fallbackToLocalStorage = true;
+                return;
             }
+
+            console.log('🔍 Supabase 클라이언트 가져오는 중...');
+            this.supabase = supabaseConfig.supabase || supabaseConfig.getClient();
+            console.log('🔍 Supabase 클라이언트:', this.supabase);
+            
+            // 연결 테스트
+            console.log('🔍 Supabase 연결 테스트 시작...');
+            const { data, error } = await this.supabase
+                .from('courses')
+                .select('count', { count: 'exact' })
+                .limit(1);
+                
+            console.log('🔍 연결 테스트 결과:', { data, error });
+                
+            if (error) {
+                console.error('❌ Supabase 연결 실패:', error);
+                console.error('❌ 오류 상세:', error.message, error.details, error.hint);
+                this.fallbackToLocalStorage = true;
+                return;
+            }
+            
+            this.initialized = true;
+            console.log('✅ Supabase 연결 성공');
+
         } catch (error) {
-            console.error(error.message);
+            console.error('❌ Supabase 초기화 실패:', error);
+            console.error('❌ 오류 스택:', error.stack);
             this.fallbackToLocalStorage = true;
-            this.initialized = false;
         }
     }
 
+    async addUser(name, department) {
+        const { data, error } = await this.supabase
+            .from('users')
+            .insert([{ name, department }])
+            .select();
+        if (error) throw error;
+        return data[0];
+    }
+
     async getUsers() {
-        const { data, error } = await this.supabase.from('users').select('*');
+        const { data, error } = await this.supabase.from('users').select('*').order('name');
         if (error) throw error;
         return data;
     }
 
-    async addUser(user) {
-        const { data, error } = await this.supabase.from('users').insert([{ name: user.name, department: user.department }]).select();
+    async getUser(userId) {
+        const { data, error } = await this.supabase.from('users').select('*').eq('id', userId).single();
         if (error) throw error;
-        return data[0];
+        return data;
     }
 
     async deleteUser(userId) {
         const { error } = await this.supabase.from('users').delete().eq('id', userId);
         if (error) throw error;
+        return true;
     }
 
     async getCourses() {
-        const { data, error } = await this.supabase.from('courses').select('*');
+        const { data, error } = await this.supabase.from('courses').select('*').order('course_name');
         if (error) throw error;
         return data;
     }
 
-    async addCourse(course) {
-        const { data, error } = await this.supabase.from('courses').insert([{ 
-            course_code: course.courseCode, 
-            course_name: course.courseName,
-            department: course.department,
-            lesson_count: course.lessonCount
-        }]).select();
+    async addCourse(courseName, courseCode, department, lessonCount) {
+        const { data, error } = await this.supabase
+            .from('courses')
+            .insert([{ course_name: courseName, course_code: courseCode, department, lesson_count: lessonCount }])
+            .select();
         if (error) throw error;
         return data[0];
-    }
-
-    async getCoursesByDepartment(department) {
-        const { data, error } = await this.supabase.from('courses').select('*').eq('department', department);
-        if (error) throw error;
-        return data;
-    }
-
-    async getLessons() {
-        const { data, error } = await this.supabase.from('lessons').select('*');
-        if (error) throw error;
-        return data;
     }
 
     async getLessonsByCourseId(courseId) {
-        const { data, error } = await this.supabase.from('lessons').select('*').eq('course_id', courseId);
+        const { data, error } = await this.supabase
+            .from('lessons')
+            .select('*')
+            .eq('course_id', courseId)
+            .order('lesson_order');
         if (error) throw error;
         return data;
     }
 
-    async addLesson(lesson) {
-        const { data, error } = await this.supabase.from('lessons').insert([{ 
-            course_id: lesson.courseId, 
-            lesson_name: lesson.lessonName 
-        }]).select();
+    async getCourseLessons(courseId) {
+        return await this.getLessonsByCourseId(courseId);
+    }
+
+    async addLesson(courseId, lessonName, lessonOrder) {
+        const { data, error } = await this.supabase
+            .from('lessons')
+            .insert([{ course_id: courseId, name: lessonName, lesson_order: lessonOrder }])
+            .select();
         if (error) throw error;
         return data[0];
     }
 
-    async getUserCourses(userId) {
-        const { data, error } = await this.supabase
-            .from('user_courses')
-            .select('*, courses(*)')
-            .eq('user_id', userId);
-        if (error) throw error;
-        return data;
-    }
-
-    async enrollUserInCourse(userId, courseId) {
+    async addUserCourse(userId, courseId) {
         const { data, error } = await this.supabase.from('user_courses').insert([{ user_id: userId, course_id: courseId }]).select();
         if (error) throw error;
         return data[0];
     }
 
-    async getUserProgress(userId) {
-        const { data, error } = await this.supabase.from('user_progress').select('*').eq('user_id', userId);
-        if (error) throw error;
-        return data;
+    async getUserCourses(userId) {
+        if (userId) {
+            const { data, error } = await this.supabase
+                .from('user_courses')
+                .select('*, courses(*)')
+                .eq('user_id', userId);
+            if (error) throw error;
+            return data;
+        } else {
+            const { data, error } = await this.supabase
+                .from('user_courses')
+                .select('*, courses(*)');
+            if (error) throw error;
+            return data;
+        }
     }
 
-    async updateProgress(userId, lessonId, completed) {
+    async getUserProgress(userId) {
+        if (userId) {
+            const { data, error } = await this.supabase.from('user_progress').select('*').eq('user_id', userId);
+            if (error) throw error;
+            return data;
+        } else {
+            const { data, error } = await this.supabase.from('user_progress').select('*');
+            if (error) throw error;
+            return data;
+        }
+    }
+
+    async updateUserProgress(userId, lessonId, completed) {
         const { data, error } = await this.supabase
             .from('user_progress')
             .upsert({ user_id: userId, lesson_id: lessonId, completed }, { onConflict: 'user_id, lesson_id' })
@@ -731,19 +830,170 @@ class SupabaseDataManager {
         return data[0];
     }
 
-    async getDashboardData() {
-        const { data, error } = await this.supabase.rpc('get_dashboard_data');
-        if (error) throw error;
-        return data[0];
+    async updateProgress(userId, lessonId, completed) {
+        // updateProgress는 updateUserProgress와 동일한 역할
+        return await this.updateUserProgress(userId, lessonId, completed);
     }
-    
-    async generateAllMissingLessons() {
-        const { data, error } = await this.supabase.rpc('generate_all_missing_lessons');
-        if (error) {
-            console.error('강의 자동 생성 실패:', error);
-            return false;
+
+    async getDashboardData() {
+        try {
+            // 최적화된 단일 쿼리로 대시보드 데이터 가져오기
+            const dashboardData = await this.getDashboardDataOptimized();
+            if (dashboardData) {
+                return dashboardData;
+            }
+            
+            // 폴백: 기존 방식 (인덱스 적용된 개별 쿼리들)
+            const [users, userCourses, userProgress] = await Promise.all([
+                this.getUsers(),
+                this.getUserCourses(),
+                this.getUserProgress()
+            ]);
+            
+            // 모든 강의 데이터를 병렬로 가져오기 (성능 최적화)
+            const allCourseIds = [...new Set(userCourses.map(uc => uc.course_id))];
+            const lessonsPromises = allCourseIds.map(courseId => 
+                this.getLessonsByCourseId(courseId).then(lessons => ({ courseId, lessons }))
+            );
+            const lessonsResults = await Promise.all(lessonsPromises);
+            
+            // Map으로 변환
+            const lessonsMap = {};
+            lessonsResults.forEach(({ courseId, lessons }) => {
+                lessonsMap[courseId] = lessons;
+            });
+            
+            const progressSummary = users.map(user => {
+                // 해당 사용자의 과목들
+                const userCoursesForUser = userCourses.filter(uc => uc.user_id === user.id);
+                
+                const courseProgress = userCoursesForUser.map(uc => {
+                    const course = uc.courses; // courses는 조인으로 가져온 데이터
+                    const lessons = lessonsMap[uc.course_id] || [];
+                    
+                    const userLessonsProgress = userProgress.filter(up => 
+                        up.user_id === user.id && 
+                        lessons.some(lesson => lesson.id === up.lesson_id)
+                    );
+                    
+                    const completedCount = userLessonsProgress.filter(up => up.completed).length;
+                    const progressPercentage = lessons.length > 0 ? 
+                        Math.round((completedCount / lessons.length) * 100) : 0;
+
+                    return {
+                        courseId: course.id,
+                        courseCode: course.course_code,
+                        courseName: course.course_name,
+                        progress: progressPercentage
+                    };
+                });
+
+                // 전체 진도율 계산
+                let totalLessons = 0;
+                let totalCompleted = 0;
+                
+                courseProgress.forEach(cp => {
+                    const lessons = lessonsMap[cp.courseId] || [];
+                    const lessonCount = lessons.length;
+                    totalLessons += lessonCount;
+                    totalCompleted += Math.round(lessonCount * (cp.progress / 100));
+                });
+
+                const overallProgress = totalLessons > 0 ? 
+                    Math.round((totalCompleted / totalLessons) * 100) : 0;
+
+                return {
+                    userId: user.id,
+                    userName: user.name,
+                    department: user.department,
+                    overallProgress,
+                    courseProgress
+                };
+            });
+
+            // 전체 진도율 순으로 정렬
+            progressSummary.sort((a, b) => b.overallProgress - a.overallProgress);
+
+            return {
+                users,
+                progressSummary
+            };
+            
+        } catch (error) {
+            console.error('Dashboard data 조회 실패:', error);
+            throw error;
         }
-        console.log('강의 자동 생성 결과:', data);
-        return data;
+    }
+
+    async getDashboardDataOptimized() {
+        try {
+            // PostgreSQL 함수나 뷰를 사용한 최적화된 쿼리
+            // 이 함수는 Supabase에서 커스텀 함수를 만든 경우에만 작동
+            const { data, error } = await this.supabase.rpc('get_dashboard_summary');
+            
+            if (error) {
+                // 커스텀 함수가 없으면 null 반환 (폴백 사용)
+                console.log('커스텀 대시보드 함수 없음, 기본 방식 사용');
+                return null;
+            }
+            
+            return data;
+        } catch (error) {
+            console.log('최적화된 쿼리 실패, 기본 방식으로 폴백:', error.message);
+            return null;
+        }
+    }
+
+    async enrollUserInCourse(userId, courseId) {
+        try {
+            const { data, error } = await this.supabase
+                .from('user_courses')
+                .insert({
+                    user_id: userId,
+                    course_id: courseId
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('과목 등록 오류:', error);
+            throw error;
+        }
+    }
+
+    async unenrollUserFromCourse(userId, courseId) {
+        try {
+            // user_courses에서 등록 정보 삭제
+            const { error: courseError } = await this.supabase
+                .from('user_courses')
+                .delete()
+                .eq('user_id', userId)
+                .eq('course_id', courseId);
+
+            if (courseError) throw courseError;
+
+            // 해당 과목의 모든 진도 정보도 삭제
+            const { error: progressError } = await this.supabase
+                .from('user_progress')
+                .delete()
+                .eq('user_id', userId)
+                .in('lesson_id', 
+                    this.supabase
+                        .from('lessons')
+                        .select('id')
+                        .eq('course_id', courseId)
+                );
+
+            if (progressError) throw progressError;
+            return true;
+        } catch (error) {
+            console.error('과목 제거 오류:', error);
+            throw error;
+        }
     }
 }
+
+// Create global instance
+const dataManager = new DataManager();

@@ -4,6 +4,16 @@ class KNOUTracker {
     constructor() {
         this.currentPage = 'dashboard';
         this.currentStudent = null;
+        this.cache = {
+            dashboardData: null,
+            lessons: new Map(),
+            lastUpdate: null,
+            stats: {
+                cacheHits: 0,
+                dbQueries: 0,
+                totalRequests: 0
+            }
+        };
         this.init();
     }
 
@@ -35,13 +45,7 @@ class KNOUTracker {
             this.handleAddUser(e);
         });
 
-        document.getElementById('add-course-form').addEventListener('submit', (e) => {
-            this.handleAddCourse(e);
-        });
-
-        document.getElementById('add-lesson-form').addEventListener('submit', (e) => {
-            this.handleAddLesson(e);
-        });
+        // Course and lesson management forms removed
 
         // Register form
         document.getElementById('register-form').addEventListener('submit', (e) => {
@@ -72,6 +76,8 @@ class KNOUTracker {
         // Render page content
         if (pageName === 'dashboard') {
             await this.renderDashboard();
+        } else if (pageName === 'student') {
+            await this.renderStudentPage();
         } else if (pageName === 'admin') {
             await this.renderAdmin();
         } else if (pageName === 'register') {
@@ -85,7 +91,7 @@ class KNOUTracker {
             const studentGrid = document.getElementById('student-grid');
             studentGrid.innerHTML = '<div class="loading">데이터를 불러오는 중...</div>';
 
-            const dashboardData = await dataManager.getDashboardData();
+            const dashboardData = await this.getCachedDashboardData();
             
             studentGrid.innerHTML = '';
 
@@ -158,51 +164,15 @@ class KNOUTracker {
     }
 
     async showStudentDetail(userId) {
-        try {
-            this.currentStudent = userId;
-            
-            // 로딩 상태 표시
-            const courseList = document.getElementById('course-list');
-            courseList.innerHTML = '<div class="loading">데이터를 불러오는 중...</div>';
-            
-            const users = await dataManager.getUsers();
-            const user = users.find(u => u.id === userId);
-            const userCourses = await dataManager.getUserCourses(userId);
-            const userProgress = await dataManager.getUserProgress(userId);
-
-        // Update student name
-        document.getElementById('student-name').textContent = user.name;
-
-            // Calculate overall progress
-            let totalLessons = 0;
-            for (const uc of userCourses) {
-                const courseId = uc.course_id || uc.courseId || (uc.courses && uc.courses.id);
-                if (courseId) {
-                    const lessons = await dataManager.getLessonsByCourseId(courseId);
-                    totalLessons += lessons.length;
-                }
-            }
-
-            const completedLessons = userProgress.filter(up => up.completed).length;
-            const overallProgress = totalLessons > 0 ? 
-                Math.round((completedLessons / totalLessons) * 100) : 0;
-
-            // Update progress circle
-            this.updateProgressCircle(overallProgress);
-
-            // Render courses
-            await this.renderStudentCourses(userCourses, userProgress);
-
-            // Show student detail page
-            document.querySelectorAll('.page').forEach(page => {
-                page.classList.remove('active');
-            });
-            document.getElementById('student-detail-page').classList.add('active');
-        } catch (error) {
-            console.error('학생 상세 정보 표시 오류:', error);
-            const courseList = document.getElementById('course-list');
-            courseList.innerHTML = '<div class="error">학생 정보를 불러오는 중 오류가 발생했습니다.</div>';
-        }
+        // 개인 현황 페이지로 이동하고 해당 학생 선택
+        await this.showPage('student');
+        
+        // 학생 선택 드롭다운에서 해당 학생 선택
+        const studentSelect = document.getElementById('student-select');
+        studentSelect.value = userId.toString();
+        
+        // 개인 현황 로드
+        await this.loadStudentProgress(userId);
     }
 
     updateProgressCircle(progress) {
@@ -386,11 +356,180 @@ class KNOUTracker {
         }
     }
 
+    // Student Progress Page functionality
+    async renderStudentPage() {
+        await this.loadStudentSelector();
+    }
+
+    async loadStudentSelector() {
+        try {
+            const studentSelect = document.getElementById('student-select');
+            studentSelect.innerHTML = '<option value="">학습자를 선택하세요</option>';
+            
+            const users = await dataManager.getUsers();
+            
+            users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.id;
+                option.textContent = `${user.name} (${user.department})`;
+                studentSelect.appendChild(option);
+            });
+            
+        } catch (error) {
+            console.error('Error loading student selector:', error);
+        }
+    }
+
+    async loadStudentProgress(userId) {
+        const startTime = performance.now();
+        
+        if (!userId) {
+            document.getElementById('student-progress-content').style.display = 'none';
+            return;
+        }
+
+        try {
+            const progressContent = document.getElementById('student-progress-content');
+            progressContent.style.display = 'block';
+            
+            // 로딩 상태 - 스켈레톤 UI
+            const coursesGrid = document.getElementById('courses-grid');
+            coursesGrid.innerHTML = this.createSkeletonLoader();
+
+            // 캐시된 대시보드 데이터 사용 (성능 최적화)
+            const dashboardData = await this.getCachedDashboardData();
+            const user = dashboardData.users.find(u => u.id === parseInt(userId));
+            const currentUserSummary = dashboardData.progressSummary.find(u => u.userId === parseInt(userId));
+            
+            // 사용자 기본 정보 표시
+            document.getElementById('selected-student-name').textContent = user.name;
+            document.getElementById('selected-student-department').textContent = user.department;
+            
+            // 전체 진도율 표시
+            const overallProgress = currentUserSummary ? currentUserSummary.overallProgress : 0;
+            document.getElementById('overall-progress-percentage').textContent = `${Math.round(overallProgress)}%`;
+            
+            // 가로 진도율 바 업데이트
+            const progressBarFill = document.getElementById('progress-bar-fill');
+            if (progressBarFill) {
+                progressBarFill.style.width = `${overallProgress}%`;
+            }
+
+            // 과목별 카드 렌더링
+            await this.renderStudentCoursesGrid(userId, currentUserSummary);
+            
+            const loadTime = performance.now() - startTime;
+            console.log(`📊 Progress data loaded in: ${loadTime.toFixed(1)}ms`);
+            
+        } catch (error) {
+            console.error('Error loading student progress:', error);
+            const coursesGrid = document.getElementById('courses-grid');
+            coursesGrid.innerHTML = '<div class="error">진도 정보를 불러오는 중 오류가 발생했습니다.</div>';
+        }
+    }
+
+    async renderStudentCoursesGrid(userId, userSummary) {
+        const coursesGrid = document.getElementById('courses-grid');
+        coursesGrid.innerHTML = '';
+        
+        if (!userSummary || !userSummary.courseProgress.length) {
+            coursesGrid.innerHTML = '<div class="no-courses">등록된 과목이 없습니다.</div>';
+            return;
+        }
+
+        for (const courseProgress of userSummary.courseProgress) {
+            const courseCard = await this.createCourseCard(userId, courseProgress);
+            coursesGrid.appendChild(courseCard);
+        }
+    }
+
+    async createCourseCard(userId, courseProgress) {
+        const courseCard = document.createElement('div');
+        courseCard.className = 'course-card';
+        
+        const lessons = await this.getCachedLessons(courseProgress.courseId);
+        const userProgressData = await dataManager.getUserProgress();
+        const userLessonsProgress = userProgressData.filter(up => 
+            (up.userId === parseInt(userId) || up.user_id === parseInt(userId)) && 
+            lessons.some(lesson => lesson.id === (up.lessonId || up.lesson_id))
+        );
+        
+        const completedCount = userLessonsProgress.filter(up => up.completed).length;
+        const totalCount = lessons.length;
+        const progressPercentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+
+        courseCard.setAttribute('data-course-id', courseProgress.courseId);
+        courseCard.innerHTML = `
+            <div class="course-card-header">
+                <h3>${courseProgress.courseName}</h3>
+                <div class="course-code">${courseProgress.courseCode}</div>
+                <div class="course-progress-bar">
+                    <div class="course-progress-fill" style="width: ${progressPercentage}%"></div>
+                </div>
+            </div>
+            <div class="course-card-body">
+                <div class="progress-info" style="margin-bottom: 0.75rem; text-align: center; font-weight: 600; font-size: 0.9rem;">
+                    ${completedCount}/${totalCount} 강의 완료 (${Math.round(progressPercentage)}%)
+                </div>
+                <div class="lessons-grid">
+                    ${lessons.map(lesson => {
+                        const isCompleted = userLessonsProgress.some(up => (up.lessonId === lesson.id || up.lesson_id === lesson.id) && up.completed);
+                        return `
+                            <div class="lesson-item ${isCompleted ? 'completed' : ''}">
+                                <input 
+                                    type="checkbox" 
+                                    class="lesson-checkbox" 
+                                    data-user-id="${userId}"
+                                    data-lesson-id="${lesson.id}"
+                                    ${isCompleted ? 'checked' : ''}
+                                    onchange="app.handleLessonToggle(this)"
+                                />
+                                <span class="lesson-name">${lesson.name || lesson.lesson_name || lesson.lessonName || `${lesson.lesson_order || lesson.lessonOrder || ''}강`}</span>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+        
+        return courseCard;
+    }
+
+    async handleLessonToggle(checkbox) {
+        const startTime = performance.now();
+        const userId = parseInt(checkbox.getAttribute('data-user-id'));
+        const lessonId = parseInt(checkbox.getAttribute('data-lesson-id'));
+        const completed = checkbox.checked;
+
+        try {
+            await dataManager.updateUserProgress(userId, lessonId, completed);
+            
+            const updateTime = performance.now() - startTime;
+            console.log(`✅ User progress updated in: ${updateTime.toFixed(1)}ms`);
+            
+            // UI 업데이트 - 해당 강의 아이템 스타일 변경
+            const lessonItem = checkbox.closest('.lesson-item');
+            if (completed) {
+                lessonItem.classList.add('completed');
+            } else {
+                lessonItem.classList.remove('completed');
+            }
+
+            // 부분적 업데이트만 수행 (성능 최적화)
+            await this.updateProgressDisplay(userId);
+            
+        } catch (error) {
+            console.error('Error updating lesson progress:', error);
+            // 오류 발생 시 체크박스 상태 되돌리기
+            checkbox.checked = !completed;
+            alert('진도 업데이트 중 오류가 발생했습니다.');
+        }
+    }
+
     // Admin functionality
     renderAdmin() {
         this.renderUserList();
-        this.renderCourseList();
-        this.renderCourseTree();
+        this.loadStudentManagementOptions();
     }
 
     async renderUserList() {
@@ -511,47 +650,7 @@ class KNOUTracker {
         }
     }
 
-    async handleAddCourse(e) {
-        e.preventDefault();
-        const courseCode = document.getElementById('course-code').value.trim();
-        const courseName = document.getElementById('course-name').value.trim();
-        const department = document.getElementById('course-department').value;
-        const lessonCount = parseInt(document.getElementById('course-lesson-count').value) || 15;
-        
-        if (!courseCode || !courseName || !department) return;
-
-        try {
-            await dataManager.addCourse({ courseCode, courseName, department, lessonCount });
-
-            document.getElementById('course-code').value = '';
-            document.getElementById('course-name').value = '';
-            document.getElementById('course-department').value = '';
-            document.getElementById('course-lesson-count').value = 15;
-            await this.renderCourseList();
-            await this.renderCourseTree();
-        } catch (error) {
-            console.error('과목 추가 오류:', error);
-            alert('과목 추가 중 오류가 발생했습니다.');
-        }
-    }
-
-    async handleAddLesson(e) {
-        e.preventDefault();
-        const courseId = parseInt(document.getElementById('lesson-course-select').value);
-        const lessonName = document.getElementById('lesson-name').value.trim();
-        
-        if (!courseId || !lessonName) return;
-
-        try {
-            await dataManager.addLesson({ courseId, lessonName });
-
-            document.getElementById('lesson-name').value = '';
-            await this.renderCourseTree();
-        } catch (error) {
-            console.error('강의 추가 오류:', error);
-            alert('강의 추가 중 오류가 발생했습니다.');
-        }
-    }
+    // Course and lesson management functions removed
 
     async deleteUser(userId) {
         if (confirm('이 학생을 정말 삭제하시겠습니까?')) {
@@ -657,9 +756,9 @@ class KNOUTracker {
                                      data-department="${dept}" data-grade="${grade}">
                                     <div class="course-grid">
                                         ${coursesByDepartment[dept][grade].map(course => `
-                                            <div class="course-card">
+                                            <div class="course-card" onclick="toggleCourseSelection('course-${course.id}')">
                                                 <div class="course-checkbox">
-                                                    <input type="checkbox" id="course-${course.id}" name="courses" value="${course.id}">
+                                                    <input type="checkbox" id="course-${course.id}" name="courses" value="${course.id}" onclick="event.stopPropagation()">
                                                 </div>
                                                 <div class="course-info">
                                                     <div class="course-name">${course.courseName}</div>
@@ -674,6 +773,27 @@ class KNOUTracker {
                     `).join('')}
                 </div>
             `;
+            
+            // 체크박스 초기 상태 설정 및 이벤트 리스너 추가
+            setTimeout(() => {
+                document.querySelectorAll('.course-card input[type="checkbox"]').forEach(checkbox => {
+                    const courseCard = checkbox.closest('.course-card');
+                    
+                    // 체크박스 변경 이벤트 리스너 추가
+                    checkbox.addEventListener('change', function() {
+                        if (this.checked) {
+                            courseCard.classList.add('selected');
+                        } else {
+                            courseCard.classList.remove('selected');
+                        }
+                    });
+                    
+                    // 초기 상태 설정
+                    if (checkbox.checked) {
+                        courseCard.classList.add('selected');
+                    }
+                });
+            }, 100);
             
         } catch (error) {
             console.error('과목 렌더링 오류:', error);
@@ -735,6 +855,23 @@ class KNOUTracker {
             return;
         }
 
+        // 닉네임 중복 검사
+        try {
+            const users = await dataManager.getUsers();
+            const isDuplicate = users.some(user => 
+                (user.name || '').toLowerCase() === name.toLowerCase()
+            );
+            
+            if (isDuplicate) {
+                alert('이미 사용 중인 닉네임입니다. 다른 닉네임을 선택해주세요.');
+                return;
+            }
+        } catch (error) {
+            console.error('닉네임 중복 검사 오류:', error);
+            alert('닉네임 중복 검사 중 오류가 발생했습니다.');
+            return;
+        }
+
         try {
             // Add new user (비동기 처리)
             const newUser = await dataManager.addUser({ name, department });
@@ -764,6 +901,64 @@ class KNOUTracker {
     resetRegisterForm() {
         document.getElementById('register-form').reset();
         document.getElementById('course-selection').innerHTML = '<p class="course-selection-note">학과를 먼저 선택해주세요.</p>';
+        
+        // 닉네임 검증 메시지 초기화
+        const validationMessage = document.getElementById('nickname-validation');
+        if (validationMessage) {
+            validationMessage.textContent = '';
+            validationMessage.className = 'validation-message';
+        }
+    }
+
+    async checkNicknameDuplicate(nickname) {
+        const validationMessage = document.getElementById('nickname-validation');
+        const submitButton = document.querySelector('#register-form button[type="submit"]');
+        
+        if (!nickname || nickname.trim() === '') {
+            validationMessage.textContent = '';
+            validationMessage.className = 'validation-message';
+            if (submitButton) submitButton.disabled = false;
+            return;
+        }
+        
+        nickname = nickname.trim();
+        
+        // 닉네임 길이 검증
+        if (nickname.length < 2) {
+            validationMessage.textContent = '닉네임은 최소 2자 이상이어야 합니다.';
+            validationMessage.className = 'validation-message warning';
+            if (submitButton) submitButton.disabled = true;
+            return;
+        }
+        
+        if (nickname.length > 20) {
+            validationMessage.textContent = '닉네임은 20자 이하로 입력해주세요.';
+            validationMessage.className = 'validation-message warning';
+            if (submitButton) submitButton.disabled = true;
+            return;
+        }
+        
+        try {
+            const users = await dataManager.getUsers();
+            const isDuplicate = users.some(user => 
+                (user.name || '').toLowerCase() === nickname.toLowerCase()
+            );
+            
+            if (isDuplicate) {
+                validationMessage.textContent = '이미 사용 중인 닉네임입니다. 다른 닉네임을 선택해주세요.';
+                validationMessage.className = 'validation-message error';
+                if (submitButton) submitButton.disabled = true;
+            } else {
+                validationMessage.textContent = '사용 가능한 닉네임입니다.';
+                validationMessage.className = 'validation-message success';
+                if (submitButton) submitButton.disabled = false;
+            }
+        } catch (error) {
+            console.error('닉네임 중복 검사 오류:', error);
+            validationMessage.textContent = '닉네임 중복 검사 중 오류가 발생했습니다.';
+            validationMessage.className = 'validation-message error';
+            if (submitButton) submitButton.disabled = true;
+        }
     }
 
     showAdminTab(tabName) {
@@ -799,13 +994,382 @@ class KNOUTracker {
         if (progress < 75) return '#27AE60';
         return '#3498DB';
     }
+
+    calculateProgressSummary(users, userProgress, userCourses) {
+        return users.map(user => {
+            // 해당 사용자의 과목들
+            const userCoursesForUser = userCourses.filter(uc => uc.userId === user.id || uc.user_id === user.id);
+            
+            const courseProgress = userCoursesForUser.map(uc => {
+                // Supabase와 localStorage 형식 모두 지원
+                const courseId = uc.courseId || uc.course_id;
+                const course = uc.course || uc.courses;
+                
+                // 해당 과목의 모든 강의 ID 가져오기 (비동기이므로 실제로는 별도 처리 필요)
+                const lessons = []; // 임시로 빈 배열, 실제로는 getLessonsByCourseId 호출 필요
+                
+                const userLessonsProgress = userProgress.filter(up => 
+                    (up.userId === user.id || up.user_id === user.id) && 
+                    lessons.some(lesson => lesson.id === (up.lessonId || up.lesson_id))
+                );
+                
+                const completedCount = userLessonsProgress.filter(up => up.completed).length;
+                const progressPercentage = lessons.length > 0 ? 
+                    Math.round((completedCount / lessons.length) * 100) : 0;
+
+                return {
+                    courseId: course?.id || courseId,
+                    courseCode: course?.courseCode || course?.course_code,
+                    courseName: course?.courseName || course?.course_name,
+                    progress: progressPercentage
+                };
+            });
+
+            // 전체 진도율 계산
+            let totalLessons = 0;
+            let totalCompleted = 0;
+            
+            courseProgress.forEach(cp => {
+                // 실제로는 각 과목의 강의 수를 가져와야 함
+                const lessonCount = 15; // 임시로 기본값 사용
+                totalLessons += lessonCount;
+                totalCompleted += Math.round(lessonCount * (cp.progress / 100));
+            });
+
+            const overallProgress = totalLessons > 0 ? 
+                Math.round((totalCompleted / totalLessons) * 100) : 0;
+
+            return {
+                userId: user.id,
+                userName: user.name,
+                department: user.department,
+                overallProgress,
+                courseProgress
+            };
+        }).sort((a, b) => b.overallProgress - a.overallProgress);
+    }
+
+    // 캐싱 및 성능 최적화 메서드들
+    async getCachedDashboardData() {
+        const startTime = performance.now();
+        const now = Date.now();
+        const CACHE_DURATION = 60000; // 1분 캐시
+
+        this.cache.stats.totalRequests++;
+        
+        if (this.cache.dashboardData && 
+            this.cache.lastUpdate && 
+            (now - this.cache.lastUpdate) < CACHE_DURATION) {
+            this.cache.stats.cacheHits++;
+            const cacheTime = performance.now() - startTime;
+            const hitRate = ((this.cache.stats.cacheHits / this.cache.stats.totalRequests) * 100).toFixed(1);
+            console.log(`🎯 Dashboard data loaded from cache in: ${cacheTime.toFixed(1)}ms (Hit rate: ${hitRate}%)`);
+            return this.cache.dashboardData;
+        }
+
+        this.cache.stats.dbQueries++;
+        console.log('🔄 Fetching fresh dashboard data from database...');
+        const dashboardData = await dataManager.getDashboardData();
+        this.cache.dashboardData = dashboardData;
+        this.cache.lastUpdate = now;
+        
+        const dbTime = performance.now() - startTime;
+        const hitRate = ((this.cache.stats.cacheHits / this.cache.stats.totalRequests) * 100).toFixed(1);
+        const queryReduction = (((this.cache.stats.totalRequests - this.cache.stats.dbQueries) / this.cache.stats.totalRequests) * 100).toFixed(1);
+        
+        console.log(`🚀 Dashboard data loaded from database in: ${dbTime.toFixed(1)}ms`);
+        console.log(`📈 Cache stats - Hit rate: ${hitRate}%, DB queries reduced by: ${queryReduction}%`);
+        
+        return dashboardData;
+    }
+
+    async getCachedLessons(courseId) {
+        if (this.cache.lessons.has(courseId)) {
+            return this.cache.lessons.get(courseId);
+        }
+
+        const lessons = await dataManager.getCourseLessons(courseId);
+        this.cache.lessons.set(courseId, lessons);
+        return lessons;
+    }
+
+    invalidateCache() {
+        this.cache.dashboardData = null;
+        this.cache.lessons.clear();
+        this.cache.lastUpdate = null;
+    }
+
+    async updateProgressDisplay(userId) {
+        try {
+            // 캐시 무효화 (새로운 진도 데이터 반영)
+            this.invalidateCache();
+            
+            // 새로운 데이터로 진도율만 업데이트
+            const dashboardData = await this.getCachedDashboardData();
+            const currentUserSummary = dashboardData.progressSummary.find(u => u.userId === parseInt(userId));
+            
+            if (currentUserSummary) {
+                // 전체 진도율 업데이트
+                const overallProgress = currentUserSummary.overallProgress;
+                document.getElementById('overall-progress-percentage').textContent = `${Math.round(overallProgress)}%`;
+                
+                // 가로 진도율 바 업데이트
+                const progressBarFill = document.getElementById('progress-bar-fill');
+                if (progressBarFill) {
+                    progressBarFill.style.width = `${overallProgress}%`;
+                }
+
+                // 과목별 진도 바 업데이트
+                this.updateCourseProgressBars(currentUserSummary);
+            }
+            
+        } catch (error) {
+            console.error('Error updating progress display:', error);
+        }
+    }
+
+    updateCourseProgressBars(userSummary) {
+        // 각 과목 카드의 진도 바를 개별적으로 업데이트
+        userSummary.courseProgress.forEach(courseProgress => {
+            const courseCard = document.querySelector(`[data-course-id="${courseProgress.courseId}"]`);
+            if (courseCard) {
+                const progressFill = courseCard.querySelector('.course-progress-fill');
+                const progressInfo = courseCard.querySelector('.progress-info');
+                
+                if (progressFill) {
+                    progressFill.style.width = `${courseProgress.progress}%`;
+                }
+                
+                // 완료 강의 수도 업데이트
+                const lessons = this.cache.lessons.get(courseProgress.courseId) || [];
+                const completedCount = Math.round(lessons.length * (courseProgress.progress / 100));
+                
+                if (progressInfo) {
+                    progressInfo.textContent = `${completedCount}/${lessons.length} 강의 완료 (${Math.round(courseProgress.progress)}%)`;
+                }
+            }
+        });
+    }
+
+    createSkeletonLoader() {
+        return `
+            <div class="skeleton-grid">
+                ${Array(3).fill(0).map(() => `
+                    <div class="skeleton-card">
+                        <div class="skeleton-header">
+                            <div class="skeleton-line skeleton-title"></div>
+                            <div class="skeleton-line skeleton-subtitle"></div>
+                            <div class="skeleton-progress-bar"></div>
+                        </div>
+                        <div class="skeleton-body">
+                            <div class="skeleton-line skeleton-info"></div>
+                            <div class="skeleton-lessons">
+                                ${Array(6).fill(0).map(() => `
+                                    <div class="skeleton-lesson">
+                                        <div class="skeleton-checkbox"></div>
+                                        <div class="skeleton-line skeleton-lesson-name"></div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+
+    // 학생별 과목 관리 기능
+    async loadStudentManagementOptions() {
+        try {
+            const users = await dataManager.getUsers();
+            const studentSelect = document.getElementById('manage-student-select');
+            
+            studentSelect.innerHTML = '<option value="">학생을 선택하세요</option>';
+            
+            users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.id;
+                option.textContent = `${user.name} (${user.department || '학과 미정'})`;
+                studentSelect.appendChild(option);
+            });
+        } catch (error) {
+            console.error('학생 목록 로딩 오류:', error);
+        }
+    }
+
+    async loadStudentCourses(userId) {
+        if (!userId) {
+            document.getElementById('student-course-content').style.display = 'none';
+            return;
+        }
+
+        try {
+            document.getElementById('student-course-content').style.display = 'block';
+            
+            // 현재 수강 중인 과목 로드
+            await this.renderCurrentCourses(parseInt(userId));
+            
+            // 추가 가능한 과목 로드
+            await this.renderAvailableCourses(parseInt(userId));
+            
+            // 학과 필터 이벤트 리스너 추가
+            document.getElementById('available-course-department').onchange = () => {
+                this.filterAvailableCourses(parseInt(userId));
+            };
+        } catch (error) {
+            console.error('학생 과목 로딩 오류:', error);
+        }
+    }
+
+    async renderCurrentCourses(userId) {
+        try {
+            const currentCoursesList = document.getElementById('current-courses-list');
+            currentCoursesList.innerHTML = '<div class="loading">로딩 중...</div>';
+            
+            const userCourses = await dataManager.getUserCourses(userId);
+            const courses = await dataManager.getCourses();
+            
+            const currentCourses = userCourses.map(uc => {
+                const course = courses.find(c => c.id === uc.course_id || c.id === uc.courseId);
+                return course;
+            }).filter(c => c);
+            
+            if (currentCourses.length === 0) {
+                currentCoursesList.innerHTML = '<div class="course-management-empty">등록된 과목이 없습니다.</div>';
+                return;
+            }
+            
+            currentCoursesList.innerHTML = currentCourses.map(course => `
+                <div class="course-management-item">
+                    <div class="course-management-info">
+                        <div class="course-management-name">${course.courseName || course.course_name}</div>
+                        <div class="course-management-code">${course.courseCode || course.course_code} • ${course.lessonCount || course.lesson_count || 15}강</div>
+                    </div>
+                    <div class="course-management-actions">
+                        <button class="btn-remove-course" onclick="app.removeCourseFromStudent(${userId}, ${course.id})">
+                            제거
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        } catch (error) {
+            console.error('현재 과목 렌더링 오류:', error);
+            document.getElementById('current-courses-list').innerHTML = '<div class="error">과목을 불러오는 중 오류가 발생했습니다.</div>';
+        }
+    }
+
+    async renderAvailableCourses(userId) {
+        try {
+            const availableCoursesList = document.getElementById('available-courses-list');
+            availableCoursesList.innerHTML = '<div class="loading">로딩 중...</div>';
+            
+            const userCourses = await dataManager.getUserCourses(userId);
+            const allCourses = await dataManager.getCourses();
+            
+            const enrolledCourseIds = userCourses.map(uc => uc.course_id || uc.courseId);
+            const availableCourses = allCourses.filter(course => !enrolledCourseIds.includes(course.id));
+            
+            this.availableCourses = availableCourses; // 필터링을 위해 저장
+            this.filterAvailableCourses(userId);
+        } catch (error) {
+            console.error('사용 가능한 과목 렌더링 오류:', error);
+            document.getElementById('available-courses-list').innerHTML = '<div class="error">과목을 불러오는 중 오류가 발생했습니다.</div>';
+        }
+    }
+
+    filterAvailableCourses(userId) {
+        if (!this.availableCourses) return;
+        
+        const selectedDepartment = document.getElementById('available-course-department').value;
+        const filteredCourses = selectedDepartment 
+            ? this.availableCourses.filter(course => (course.department || course.course_department) === selectedDepartment)
+            : this.availableCourses;
+        
+        const availableCoursesList = document.getElementById('available-courses-list');
+        
+        if (filteredCourses.length === 0) {
+            availableCoursesList.innerHTML = '<div class="course-management-empty">추가 가능한 과목이 없습니다.</div>';
+            return;
+        }
+        
+        availableCoursesList.innerHTML = filteredCourses.map(course => `
+            <div class="course-management-item">
+                <div class="course-management-info">
+                    <div class="course-management-name">${course.courseName || course.course_name}</div>
+                    <div class="course-management-code">${course.courseCode || course.course_code} • ${course.lessonCount || course.lesson_count || 15}강</div>
+                </div>
+                <div class="course-management-actions">
+                    <button class="btn-add-course" onclick="app.addCourseToStudent(${userId}, ${course.id})">
+                        추가
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async addCourseToStudent(userId, courseId) {
+        try {
+            await dataManager.enrollUserInCourse(userId, courseId);
+            
+            // 과목 목록 새로고침
+            await this.renderCurrentCourses(userId);
+            await this.renderAvailableCourses(userId);
+            
+            // 대시보드도 새로고침
+            this.cache.dashboardData = null; // 캐시 무효화
+            await this.renderDashboard();
+            
+            alert('과목이 성공적으로 추가되었습니다.');
+        } catch (error) {
+            console.error('과목 추가 오류:', error);
+            alert('과목 추가 중 오류가 발생했습니다.');
+        }
+    }
+
+    async removeCourseFromStudent(userId, courseId) {
+        if (confirm('이 과목을 정말 제거하시겠습니까? 해당 과목의 모든 진도 정보도 함께 삭제됩니다.')) {
+            try {
+                await dataManager.unenrollUserFromCourse(userId, courseId);
+                
+                // 과목 목록 새로고침
+                await this.renderCurrentCourses(userId);
+                await this.renderAvailableCourses(userId);
+                
+                // 대시보드도 새로고침
+                this.cache.dashboardData = null; // 캐시 무효화
+                await this.renderDashboard();
+                
+                alert('과목이 성공적으로 제거되었습니다.');
+            } catch (error) {
+                console.error('과목 제거 오류:', error);
+                alert('과목 제거 중 오류가 발생했습니다.');
+            }
+        }
+    }
 }
 
-// Global functions for inline event handlers
+// Global functions for inline event handlers  
 window.showPage = (pageName) => app.showPage(pageName);
 window.showAdminTab = (tabName) => app.showAdminTab(tabName);
 window.filterCourses = (filterType) => app.filterCourses(filterType);
 window.showGrade = (department, grade) => app.showGrade(department, grade);
+
+// Course selection helper functions
+window.toggleCourseSelection = (checkboxId) => {
+    const checkbox = document.getElementById(checkboxId);
+    if (checkbox) {
+        checkbox.checked = !checkbox.checked;
+        // 체크박스 상태가 변경된 것을 시각적으로 반영
+        const courseCard = checkbox.closest('.course-card');
+        if (courseCard) {
+            if (checkbox.checked) {
+                courseCard.classList.add('selected');
+            } else {
+                courseCard.classList.remove('selected');
+            }
+        }
+    }
+};
 
 // Initialize app
 const app = new KNOUTracker();
