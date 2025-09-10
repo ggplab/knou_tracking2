@@ -2,7 +2,6 @@
 
 방송통신대학교 학생들을 위한 개인 학습 진도 추적 및 관리 웹 애플리케이션
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-knou.ggplab.xyz-blue?style=for-the-badge)](https://knou.ggplab.xyz)
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-black?style=for-the-badge&logo=github)](https://github.com/ggplab/knou_tracking2)
 
 ## 🎯 프로젝트 개요
@@ -23,8 +22,6 @@
 - ✅ **실제 교육과정 반영**: 2025년 2학기 정식 과목 데이터
 
 ## 🚀 Live Demo
-
-**🔗 [https://knou.ggplab.xyz](https://knou.ggplab.xyz)**
 
 ## 🛠 기술 스택
 
