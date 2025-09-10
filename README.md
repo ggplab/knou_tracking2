@@ -1,6 +1,10 @@
 # 📚 KNOU 학습 진도 관리 시스템
 
 방송통신대학교 학생들을 위한 개인 학습 진도 추적 및 관리 웹 애플리케이션
+<img width="1285" height="936" alt="학습 현황" src="https://github.com/user-attachments/assets/bf40ada3-0732-49b9-9c2d-29e4ec17f1ee" />
+
+<img width="1222" height="793" alt="스크린샷 2025-09-05 오전 9 37 33" src="https://github.com/user-attachments/assets/b27631cf-f0e4-48ce-b5e7-49b058a421d0" />
+
 
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-black?style=for-the-badge&logo=github)](https://github.com/ggplab/knou_tracking2)
 
