@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로깅 시스템 빠른 테스트</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            max-width: 600px; 
+            margin: 50px auto; 
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container { 
+            background: white; 
+            padding: 30px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .button { 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            padding: 12px 24px; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            margin: 8px; 
+            font-size: 14px;
+            min-width: 150px;
+        }
+        .button:hover { background: #0056b3; }
+        .success { background: #28a745; }
+        .danger { background: #dc3545; }
+        .result { 
+            background: #f8f9fa; 
+            border: 1px solid #dee2e6; 
+            border-radius: 4px; 
+            padding: 15px; 
+            margin: 15px 0; 
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .status { 
+            padding: 10px; 
+            border-radius: 4px; 
+            margin: 10px 0; 
+            font-weight: bold;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 로깅 시스템 빠른 테스트</h1>
+        <p>현재 브랜치에서 로깅 시스템이 정상 작동하는지 확인합니다.</p>
+        
+        <div id="status" class="status info">테스트 준비 중...</div>
+        
+        <div style="margin: 20px 0;">
+            <button class="button" onclick="runBasicTest()">기본 로깅 테스트</button>
+            <button class="button" onclick="runErrorTest()">에러 로깅 테스트</button>
+            <button class="button" onclick="runPerformanceTest()">성능 로깅 테스트</button>
+            <button class="button success" onclick="runFullTest()">전체 테스트 실행</button>
+        </div>
+        
+        <div style="margin: 20px 0;">
+            <button class="button" onclick="checkSupabaseConnection()">Supabase 연결 확인</button>
+            <button class="button" onclick="checkLocalStorage()">로컬 저장소 확인</button>
+            <button class="button danger" onclick="clearResults()">결과 초기화</button>
+        </div>
+        
+        <div id="results" class="result">테스트 결과가 여기에 표시됩니다...</div>
+    </div>
+
+    <!-- 필요한 스크립트 로드 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <script src="logging.js"></script>
+
+    <script>
+        let testLogManager = null;
+        let testResults = [];
+
+        // 초기화
+        async function initializeTest() {
+            try {
+                updateStatus('로깅 시스템 초기화 중...', 'info');
+                
+                let supabaseClient = null;
+                if (typeof supabaseConfig !== 'undefined' && supabaseConfig.initialized) {
+                    supabaseClient = supabaseConfig.getClient();
+                    addResult('✅ Supabase 설정 확인됨');
+                } else {
+                    addResult('⚠️ Supabase 설정 없음 - LocalStorage 모드');
+                }
+
+                testLogManager = await initializeLogManager(supabaseClient);
+                testLogManager.setUser(999); // 테스트 사용자 ID
+                
+                addResult('✅ 로깅 시스템 초기화 성공');
+                updateStatus('테스트 준비 완료', 'success');
+                
+            } catch (error) {
+                addResult('❌ 초기화 실패: ' + error.message);
+                updateStatus('초기화 실패', 'error');
+            }
+        }
+
+        // 기본 로깅 테스트
+        async function runBasicTest() {
+            if (!testLogManager) {
+                addResult('❌ 로깅 시스템이 초기화되지 않음');
+                return;
+            }
+
+            try {
+                addResult('\n=== 기본 로깅 테스트 시작 ===');
+                
+                // 각종 로그 타입 테스트
+                await testLogManager.log(LOG_ACTIONS.PAGE_VIEW, 'test_page', {test: true});
+                addResult('✅ 페이지 뷰 로그 생성');
+                
+                await testLogManager.log(LOG_ACTIONS.USER_REGISTER, 'test_user', {name: '테스트'});
+                addResult('✅ 사용자 등록 로그 생성');
+                
+                await testLogManager.log(LOG_ACTIONS.LESSON_COMPLETE, 'test_lesson', {lessonId: 1});
+                addResult('✅ 강의 완료 로그 생성');
+                
+                addResult('✅ 기본 로깅 테스트 완료\n');
+                
+            } catch (error) {
+                addResult('❌ 기본 테스트 실패: ' + error.message);
+            }
+        }
+
+        // 에러 로깅 테스트
+        async function runErrorTest() {
+            if (!testLogManager) {
+                addResult('❌ 로깅 시스템이 초기화되지 않음');
+                return;
+            }
+
+            try {
+                addResult('\n=== 에러 로깅 테스트 시작 ===');
+                
+                const testError = new Error('테스트 에러');
+                testError.stack = 'Test Error Stack\n  at runErrorTest';
+                
+                await testLogManager.logError(testError, 'quick_test');
+                addResult('✅ 에러 로그 생성');
+                
+                await testLogManager.log(LOG_ACTIONS.VALIDATION_ERROR, 'test_validation', {field: 'email'});
+                addResult('✅ 유효성 검사 에러 로그 생성');
+                
+                addResult('✅ 에러 로깅 테스트 완료\n');
+                
+            } catch (error) {
+                addResult('❌ 에러 테스트 실패: ' + error.message);
+            }
+        }
+
+        // 성능 로깅 테스트
+        async function runPerformanceTest() {
+            if (!testLogManager) {
+                addResult('❌ 로깅 시스템이 초기화되지 않음');
+                return;
+            }
+
+            try {
+                addResult('\n=== 성능 로깅 테스트 시작 ===');
+                
+                const startTime = performance.now();
+                
+                // 가짜 작업 시뮬레이션
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+                const duration = performance.now() - startTime;
+                
+                await testLogManager.logPerformance('test_operation', duration, {
+                    testData: 'performance_test'
+                });
+                
+                addResult(`✅ 성능 로그 생성 (${duration.toFixed(2)}ms)`);
+                addResult('✅ 성능 로깅 테스트 완료\n');
+                
+            } catch (error) {
+                addResult('❌ 성능 테스트 실패: ' + error.message);
+            }
+        }
+
+        // 전체 테스트 실행
+        async function runFullTest() {
+            addResult('\n🚀 전체 테스트 실행 시작...\n');
+            updateStatus('전체 테스트 실행 중...', 'info');
+            
+            await runBasicTest();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            await runErrorTest();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            await runPerformanceTest();
+            
+            // 요약 정보
+            addResult('=== 테스트 요약 ===');
+            addResult(`생성된 로그 수: ${testLogManager?.logs?.length || 0}`);
+            addResult(`성능 메트릭: ${JSON.stringify(testLogManager?.getPerformanceMetrics() || {})}`);
+            
+            updateStatus('전체 테스트 완료', 'success');
+        }
+
+        // Supabase 연결 확인
+        async function checkSupabaseConnection() {
+            try {
+                addResult('\n=== Supabase 연결 확인 ===');
+                
+                if (typeof supabaseConfig === 'undefined') {
+                    addResult('❌ supabaseConfig가 로드되지 않음');
+                    return;
+                }
+                
+                if (!supabaseConfig.initialized) {
+                    addResult('❌ Supabase가 초기화되지 않음');
+                    return;
+                }
+                
+                const client = supabaseConfig.getClient();
+                addResult('✅ Supabase 클라이언트 생성됨');
+                
+                // 실제 연결 테스트 (user_activity_logs 테이블 확인)
+                const { data, error } = await client
+                    .from('user_activity_logs')
+                    .select('count', { count: 'exact', head: true });
+                
+                if (error) {
+                    addResult('❌ 연결 테스트 실패: ' + error.message);
+                } else {
+                    addResult('✅ Supabase 연결 성공');
+                    addResult(`📊 현재 로그 개수: ${data || 0}`);
+                }
+                
+            } catch (error) {
+                addResult('❌ 연결 확인 실패: ' + error.message);
+            }
+        }
+
+        // 로컬 저장소 확인
+        function checkLocalStorage() {
+            addResult('\n=== 로컬 저장소 확인 ===');
+            
+            try {
+                const queue = localStorage.getItem('knou_log_queue');
+                if (queue) {
+                    const parsed = JSON.parse(queue);
+                    addResult(`📦 로컬 큐에 ${parsed.length}개 로그 저장됨`);
+                } else {
+                    addResult('📦 로컬 큐 비어있음');
+                }
+                
+                // 테스트 저장
+                localStorage.setItem('logging_test', 'test_value');
+                const testValue = localStorage.getItem('logging_test');
+                localStorage.removeItem('logging_test');
+                
+                if (testValue === 'test_value') {
+                    addResult('✅ 로컬 저장소 정상 작동');
+                } else {
+                    addResult('❌ 로컬 저장소 문제');
+                }
+                
+            } catch (error) {
+                addResult('❌ 로컬 저장소 확인 실패: ' + error.message);
+            }
+        }
+
+        // 유틸리티 함수들
+        function updateStatus(message, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+        }
+
+        function addResult(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            testResults.push(`[${timestamp}] ${message}`);
+            document.getElementById('results').textContent = testResults.join('\n');
+            
+            // 자동 스크롤
+            const resultsEl = document.getElementById('results');
+            resultsEl.scrollTop = resultsEl.scrollHeight;
+        }
+
+        function clearResults() {
+            testResults = [];
+            document.getElementById('results').textContent = '테스트 결과가 여기에 표시됩니다...';
+            updateStatus('결과 초기화됨', 'info');
+        }
+
+        // 페이지 로드 시 초기화
+        window.addEventListener('load', initializeTest);
+    </script>
+</body>
+</html>
