@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로깅 시스템 테스트</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        .button.danger {
+            background: #dc3545;
+        }
+        .button.danger:hover {
+            background: #c82333;
+        }
+        .button.success {
+            background: #28a745;
+        }
+        .button.success:hover {
+            background: #218838;
+        }
+        .log-display {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 로깅 시스템 테스트</h1>
+        <p>KNOU 트래킹 시스템의 로깅 기능을 테스트해보세요.</p>
+        
+        <div id="status" class="status" style="display: none;"></div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="total-logs">0</div>
+                <div class="stat-label">총 로그</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="session-logs">0</div>
+                <div class="stat-label">세션 로그</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="error-logs">0</div>
+                <div class="stat-label">에러 로그</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="queue-size">0</div>
+                <div class="stat-label">로컬 큐</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>테스트 액션</h2>
+        <div style="margin-bottom: 20px;">
+            <button class="button" onclick="testUserAction()">사용자 액션 로그</button>
+            <button class="button" onclick="testPageView()">페이지 뷰 로그</button>
+            <button class="button" onclick="testPerformance()">성능 로그</button>
+            <button class="button success" onclick="testSuccess()">성공 로그</button>
+            <button class="button danger" onclick="testError()">에러 로그</button>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+            <button class="button" onclick="testBulkLogs()">대량 로그 생성</button>
+            <button class="button" onclick="clearLocalLogs()">로컬 로그 삭제</button>
+            <button class="button" onclick="refreshStats()">통계 새로고침</button>
+            <button class="button" onclick="exportLogs()">로그 내보내기</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>로그 레벨 설정</h2>
+        <div style="margin-bottom: 20px;">
+            <button class="button" onclick="setLogLevel(0)">DEBUG</button>
+            <button class="button" onclick="setLogLevel(1)">INFO</button>
+            <button class="button" onclick="setLogLevel(2)">WARN</button>
+            <button class="button" onclick="setLogLevel(3)">ERROR</button>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+            <label>
+                <input type="checkbox" id="console-logging" checked onchange="toggleConsoleLogging()">
+                콘솔 로깅 활성화
+            </label>
+            <br>
+            <label>
+                <input type="checkbox" id="supabase-logging" checked onchange="toggleSupabaseLogging()">
+                Supabase 로깅 활성화
+            </label>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>실시간 로그</h2>
+        <div id="log-display" class="log-display"></div>
+    </div>
+
+    <!-- 로깅 스크립트 로드 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <script src="logging.js"></script>
+
+    <script>
+        let testLogManager = null;
+        let sessionLogCount = 0;
+        let errorLogCount = 0;
+
+        // 로깅 시스템 초기화
+        async function initializeTestLogging() {
+            try {
+                // Supabase 클라이언트 초기화
+                let supabaseClient = null;
+                if (typeof supabaseConfig !== 'undefined' && supabaseConfig.initialized) {
+                    supabaseClient = supabaseConfig.getClient();
+                }
+
+                testLogManager = await initializeLogManager(supabaseClient);
+                
+                // 사용자 설정
+                testLogManager.setUser(999); // 테스트 사용자 ID
+                
+                showStatus('로깅 시스템이 성공적으로 초기화되었습니다.', 'success');
+                
+                // 초기화 로그
+                await testLogManager.log(LOG_ACTIONS.SYSTEM_INIT, 'logging_test', {
+                    test_mode: true,
+                    timestamp: new Date().toISOString()
+                });
+                
+                updateStats();
+            } catch (error) {
+                showStatus('로깅 시스템 초기화 실패: ' + error.message, 'error');
+                console.error('로깅 초기화 실패:', error);
+            }
+        }
+
+        // 테스트 함수들
+        async function testUserAction() {
+            if (!testLogManager) return;
+            
+            await testLogManager.logUserAction(LOG_ACTIONS.LESSON_COMPLETE, 'test_lesson_1', {
+                lessonId: 1,
+                courseName: '테스트 과목',
+                completionTime: new Date().toISOString()
+            });
+            
+            sessionLogCount++;
+            updateDisplay('사용자 액션 로그가 기록되었습니다.');
+            updateStats();
+        }
+
+        async function testPageView() {
+            if (!testLogManager) return;
+            
+            await testLogManager.logPageView('test_page', {
+                pageType: 'test',
+                referrer: 'test_logging.html'
+            });
+            
+            sessionLogCount++;
+            updateDisplay('페이지 뷰 로그가 기록되었습니다.');
+            updateStats();
+        }
+
+        async function testPerformance() {
+            if (!testLogManager) return;
+            
+            const startTime = performance.now();
+            
+            // 가짜 작업 시뮬레이션
+            await new Promise(resolve => setTimeout(resolve, Math.random() * 100));
+            
+            const duration = performance.now() - startTime;
+            
+            await testLogManager.logPerformance('test_operation', duration, {
+                operationType: 'test',
+                dataSize: Math.floor(Math.random() * 1000)
+            });
+            
+            sessionLogCount++;
+            updateDisplay(`성능 로그가 기록되었습니다. (${duration.toFixed(2)}ms)`);
+            updateStats();
+        }
+
+        async function testSuccess() {
+            if (!testLogManager) return;
+            
+            await testLogManager.info(LOG_ACTIONS.USER_REGISTER, 'test_success', {
+                message: '테스트 성공 로그',
+                testData: { success: true, timestamp: new Date().toISOString() }
+            });
+            
+            sessionLogCount++;
+            updateDisplay('성공 로그가 기록되었습니다.');
+            updateStats();
+        }
+
+        async function testError() {
+            if (!testLogManager) return;
+            
+            const testError = new Error('테스트 에러 메시지');
+            testError.stack = 'Test Error Stack\n  at testError\n  at onclick';
+            
+            await testLogManager.logError(testError, 'test_error_context');
+            
+            sessionLogCount++;
+            errorLogCount++;
+            updateDisplay('에러 로그가 기록되었습니다.');
+            updateStats();
+        }
+
+        async function testBulkLogs() {
+            if (!testLogManager) return;
+            
+            const bulkCount = 10;
+            showStatus(`${bulkCount}개의 로그를 생성 중...`, 'info');
+            
+            for (let i = 0; i < bulkCount; i++) {
+                await testLogManager.log(
+                    LOG_ACTIONS.PAGE_VIEW, 
+                    `bulk_test_${i}`, 
+                    {
+                        bulkIndex: i,
+                        totalBulk: bulkCount,
+                        randomData: Math.random()
+                    }
+                );
+                sessionLogCount++;
+            }
+            
+            updateDisplay(`${bulkCount}개의 대량 로그가 생성되었습니다.`);
+            updateStats();
+            showStatus('대량 로그 생성 완료', 'success');
+        }
+
+        function clearLocalLogs() {
+            localStorage.removeItem('knou_log_queue');
+            updateDisplay('로컬 로그가 삭제되었습니다.');
+            updateStats();
+        }
+
+        function setLogLevel(level) {
+            if (!testLogManager) return;
+            
+            testLogManager.setLogLevel(level);
+            const levels = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
+            updateDisplay(`로그 레벨이 ${levels[level]}로 설정되었습니다.`);
+        }
+
+        function toggleConsoleLogging() {
+            if (!testLogManager) return;
+            
+            const enabled = document.getElementById('console-logging').checked;
+            testLogManager.toggleConsoleLogging(enabled);
+            updateDisplay(`콘솔 로깅이 ${enabled ? '활성화' : '비활성화'}되었습니다.`);
+        }
+
+        function toggleSupabaseLogging() {
+            if (!testLogManager) return;
+            
+            const enabled = document.getElementById('supabase-logging').checked;
+            testLogManager.toggleSupabaseLogging(enabled);
+            updateDisplay(`Supabase 로깅이 ${enabled ? '활성화' : '비활성화'}되었습니다.`);
+        }
+
+        function refreshStats() {
+            updateStats();
+            updateDisplay('통계가 새로고침되었습니다.');
+        }
+
+        function exportLogs() {
+            if (!testLogManager) return;
+            
+            const logs = testLogManager.logs || [];
+            const localQueue = JSON.parse(localStorage.getItem('knou_log_queue') || '[]');
+            
+            const exportData = {
+                sessionLogs: logs,
+                localQueue: localQueue,
+                stats: {
+                    sessionLogCount,
+                    errorLogCount,
+                    exportTime: new Date().toISOString()
+                }
+            };
+            
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `knou_logs_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            updateDisplay('로그가 내보내기되었습니다.');
+        }
+
+        // UI 업데이트 함수들
+        function showStatus(message, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+            statusEl.style.display = 'block';
+            
+            setTimeout(() => {
+                statusEl.style.display = 'none';
+            }, 3000);
+        }
+
+        function updateDisplay(message) {
+            const logDisplay = document.getElementById('log-display');
+            const timestamp = new Date().toLocaleTimeString();
+            logDisplay.textContent += `[${timestamp}] ${message}\n`;
+            logDisplay.scrollTop = logDisplay.scrollHeight;
+        }
+
+        function updateStats() {
+            const localQueue = JSON.parse(localStorage.getItem('knou_log_queue') || '[]');
+            
+            document.getElementById('total-logs').textContent = 
+                (testLogManager?.logs?.length || 0) + localQueue.length;
+            document.getElementById('session-logs').textContent = sessionLogCount;
+            document.getElementById('error-logs').textContent = errorLogCount;
+            document.getElementById('queue-size').textContent = localQueue.length;
+        }
+
+        // 페이지 로드 시 초기화
+        window.addEventListener('load', () => {
+            initializeTestLogging();
+            
+            // 5초마다 통계 업데이트
+            setInterval(updateStats, 5000);
+        });
+
+        // 온라인/오프라인 상태 감지
+        window.addEventListener('online', () => {
+            showStatus('온라인 상태입니다. 로그 동기화 중...', 'success');
+        });
+
+        window.addEventListener('offline', () => {
+            showStatus('오프라인 상태입니다. 로그는 로컬에 저장됩니다.', 'error');
+        });
+    </script>
+</body>
+</html>
