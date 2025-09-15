@@ -29,6 +29,9 @@ class DataManager {
                     this.useSupabase = true;
                     console.log('✅ Supabase 모드로 실행');
                     
+                    // Supabase 연결 성공 후 로깅 시스템 초기화
+                    await this.initializeLogging();
+                    
                     // Supabase 연결 성공 시 기존 localStorage 데이터 정리
                     if (localStorage.getItem('knou-users')) {
                         console.log('🧹 기존 localStorage 데이터 정리 중...');
@@ -50,7 +53,47 @@ class DataManager {
         console.log('📦 LocalStorage 모드로 실행');
         this.useSupabase = false;
         this.initializeData();
+        
+        // LocalStorage 모드에서도 로깅 시스템 초기화 (Supabase 없이)
+        await this.initializeLogging();
+        
         this.initialized = true;
+    }
+
+    async initializeLogging() {
+        try {
+            if (typeof initializeLogManager !== 'undefined') {
+                const supabaseClient = this.useSupabase && this.supabaseManager?.supabase 
+                    ? this.supabaseManager.supabase 
+                    : null;
+                    
+                console.log('🔍 로깅 시스템 초기화 중...', {
+                    useSupabase: this.useSupabase,
+                    hasSupabaseClient: !!supabaseClient
+                });
+                
+                this.logManager = await initializeLogManager(supabaseClient);
+                
+                if (this.logManager) {
+                    console.log('✅ 로깅 시스템 초기화 완료', {
+                        enableSupabaseLog: this.logManager.enableSupabaseLog,
+                        sessionId: this.logManager.sessionId
+                    });
+                } else {
+                    console.warn('⚠️ 로깅 시스템 초기화 실패');
+                }
+            } else {
+                console.warn('⚠️ LogManager가 로드되지 않았습니다.');
+            }
+        } catch (error) {
+            console.error('❌ 로깅 시스템 초기화 실패:', error);
+        }
+    }
+
+    async log(actionType, target = null, details = null, userId = null) {
+        if (this.logManager) {
+            await this.logManager.log(actionType, target, details, userId);
+        }
     }
 
     initializeData() {
@@ -323,21 +366,43 @@ class DataManager {
     }
 
     async addUser(user) {
-        if (this.useSupabase) {
-            return await this.supabaseManager.addUser(user);
-        }
+        const startTime = performance.now();
         
-        const data = this.getData();
-        const newId = Math.max(...data.users.map(u => u.id), 0) + 1;
-        const newUser = {
-            ...user,
-            id: newId,
-            department: user.department || '통계·데이터',
-            createdAt: new Date().toISOString()
-        };
-        data.users.push(newUser);
-        this.saveData(data);
-        return newUser;
+        try {
+            let newUser;
+            if (this.useSupabase) {
+                newUser = await this.supabaseManager.addUser(user);
+            } else {
+                const data = this.getData();
+                const newId = Math.max(...data.users.map(u => u.id), 0) + 1;
+                newUser = {
+                    ...user,
+                    id: newId,
+                    department: user.department || '통계·데이터',
+                    createdAt: new Date().toISOString()
+                };
+                data.users.push(newUser);
+                this.saveData(data);
+            }
+            
+            // 성공 로그
+            await this.log(LOG_ACTIONS.USER_REGISTER, 'user_management', {
+                userId: newUser.id,
+                userName: newUser.name,
+                department: newUser.department,
+                duration_ms: performance.now() - startTime
+            });
+            
+            return newUser;
+        } catch (error) {
+            // 에러 로그
+            await this.log(LOG_ACTIONS.ERROR_OCCURRED, 'user_add', {
+                error: error.message,
+                userData: { name: user.name, department: user.department },
+                duration_ms: performance.now() - startTime
+            });
+            throw error;
+        }
     }
 
     async deleteUser(userId) {
@@ -578,32 +643,61 @@ class DataManager {
     }
 
     async updateProgress(userId, lessonId, completed) {
-        if (this.useSupabase) {
-            return await this.supabaseManager.updateProgress(userId, lessonId, completed);
-        }
+        const startTime = performance.now();
         
-        const data = this.getData();
-        let progressRecord = data.userProgress.find(up => 
-            up.userId === userId && up.lessonId === lessonId
-        );
+        try {
+            let progressRecord;
+            if (this.useSupabase) {
+                progressRecord = await this.supabaseManager.updateProgress(userId, lessonId, completed);
+            } else {
+                const data = this.getData();
+                progressRecord = data.userProgress.find(up => 
+                    up.userId === userId && up.lessonId === lessonId
+                );
 
-        if (progressRecord) {
-            progressRecord.completed = completed;
-            progressRecord.completedAt = completed ? new Date().toISOString() : null;
-        } else {
-            const newId = Math.max(...data.userProgress.map(up => up.id), 0) + 1;
-            progressRecord = {
-                id: newId,
-                userId,
-                lessonId,
-                completed,
-                completedAt: completed ? new Date().toISOString() : null
-            };
-            data.userProgress.push(progressRecord);
+                if (progressRecord) {
+                    progressRecord.completed = completed;
+                    progressRecord.completedAt = completed ? new Date().toISOString() : null;
+                } else {
+                    const newId = Math.max(...data.userProgress.map(up => up.id), 0) + 1;
+                    progressRecord = {
+                        id: newId,
+                        userId,
+                        lessonId,
+                        completed,
+                        completedAt: completed ? new Date().toISOString() : null
+                    };
+                    data.userProgress.push(progressRecord);
+                }
+
+                this.saveData(data);
+            }
+            
+            // 진도 업데이트 로그
+            await this.log(
+                completed ? LOG_ACTIONS.LESSON_COMPLETE : LOG_ACTIONS.LESSON_UNCOMPLETE, 
+                'progress_update', 
+                {
+                    userId: userId,
+                    lessonId: lessonId,
+                    completed: completed,
+                    duration_ms: performance.now() - startTime
+                },
+                userId
+            );
+            
+            return progressRecord;
+        } catch (error) {
+            // 에러 로그
+            await this.log(LOG_ACTIONS.ERROR_OCCURRED, 'progress_update', {
+                error: error.message,
+                userId: userId,
+                lessonId: lessonId,
+                completed: completed,
+                duration_ms: performance.now() - startTime
+            }, userId);
+            throw error;
         }
-
-        this.saveData(data);
-        return progressRecord;
     }
 
     async updateUserProgress(userId, lessonId, completed) {

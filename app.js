@@ -18,6 +18,8 @@ class KNOUTracker {
     }
 
     async init() {
+        const startTime = performance.now();
+        
         this.setupEventListeners();
         
         // DataManager 초기화 완료까지 대기
@@ -25,9 +27,20 @@ class KNOUTracker {
             await new Promise(resolve => setTimeout(resolve, 100));
         }
         
+        // 로깅 시스템 접근
+        this.logManager = dataManager.logManager;
+        
         await this.renderDashboard();
         await this.renderAdmin();
         await this.renderRegister();
+        
+        // 앱 초기화 완료 로그
+        if (this.logManager) {
+            await this.logManager.log(LOG_ACTIONS.SYSTEM_INIT, 'app_initialization', {
+                duration_ms: performance.now() - startTime,
+                pages_initialized: ['dashboard', 'admin', 'register']
+            });
+        }
     }
 
     setupEventListeners() {
@@ -59,6 +72,8 @@ class KNOUTracker {
     }
 
     async showPage(pageName) {
+        const startTime = performance.now();
+        
         // Update navigation
         document.querySelectorAll('.nav-link').forEach(link => {
             link.classList.remove('active');
@@ -82,6 +97,15 @@ class KNOUTracker {
             await this.renderAdmin();
         } else if (pageName === 'register') {
             await this.renderRegister();
+        }
+        
+        // 페이지 뷰 로그
+        if (this.logManager) {
+            await this.logManager.log(LOG_ACTIONS.PAGE_VIEW, pageName, {
+                previousPage: this.currentPage,
+                duration_ms: performance.now() - startTime,
+                timestamp: new Date().toISOString()
+            });
         }
     }
 
@@ -173,6 +197,14 @@ class KNOUTracker {
         
         // 개인 현황 로드
         await this.loadStudentProgress(userId);
+        
+        // 학생 상세 뷰 로그
+        if (this.logManager) {
+            await this.logManager.log(LOG_ACTIONS.USER_VIEW, 'student_detail', {
+                viewedUserId: userId,
+                timestamp: new Date().toISOString()
+            });
+        }
     }
 
     updateProgressCircle(progress) {
@@ -844,6 +876,7 @@ class KNOUTracker {
 
     async handleRegister(e) {
         e.preventDefault();
+        const startTime = performance.now();
         
         const name = document.getElementById('register-name').value.trim();
         const department = document.getElementById('register-department').value;
@@ -851,6 +884,15 @@ class KNOUTracker {
             .map(cb => parseInt(cb.value));
 
         if (!name || !department || selectedCourses.length === 0) {
+            // 유효성 검사 실패 로그
+            if (this.logManager) {
+                await this.logManager.log(LOG_ACTIONS.VALIDATION_ERROR, 'register_form', {
+                    error: 'incomplete_form',
+                    name: !!name,
+                    department: !!department,
+                    coursesSelected: selectedCourses.length
+                });
+            }
             alert('모든 필드를 입력해주세요. 최소 1개 이상의 과목을 선택해주세요.');
             return;
         }
@@ -863,11 +905,21 @@ class KNOUTracker {
             );
             
             if (isDuplicate) {
+                // 중복 닉네임 로그
+                if (this.logManager) {
+                    await this.logManager.log(LOG_ACTIONS.VALIDATION_ERROR, 'register_form', {
+                        error: 'duplicate_name',
+                        attemptedName: name
+                    });
+                }
                 alert('이미 사용 중인 닉네임입니다. 다른 닉네임을 선택해주세요.');
                 return;
             }
         } catch (error) {
             console.error('닉네임 중복 검사 오류:', error);
+            if (this.logManager) {
+                await this.logManager.logError(error, 'nickname_validation');
+            }
             alert('닉네임 중복 검사 중 오류가 발생했습니다.');
             return;
         }
@@ -881,6 +933,25 @@ class KNOUTracker {
             for (const courseId of selectedCourses) {
                 const enrollment = await dataManager.enrollUserInCourse(newUser.id, courseId);
                 console.log('📚 수강 등록 완료:', { userId: newUser.id, courseId, enrollment });
+                
+                // 과목 등록 로그
+                if (this.logManager) {
+                    await this.logManager.log(LOG_ACTIONS.COURSE_ENROLL, 'course_enrollment', {
+                        userId: newUser.id,
+                        courseId: courseId
+                    }, newUser.id);
+                }
+            }
+
+            // 회원가입 성공 로그
+            if (this.logManager) {
+                await this.logManager.log(LOG_ACTIONS.USER_REGISTER, 'user_registration', {
+                    userId: newUser.id,
+                    userName: name,
+                    department: department,
+                    coursesEnrolled: selectedCourses.length,
+                    duration_ms: performance.now() - startTime
+                }, newUser.id);
             }
 
             // Reset form and show success message
@@ -894,6 +965,9 @@ class KNOUTracker {
             this.showPage('dashboard');
         } catch (error) {
             console.error('사용자 등록 오류:', error);
+            if (this.logManager) {
+                await this.logManager.logError(error, 'user_registration', null);
+            }
             alert('사용자 등록 중 오류가 발생했습니다.');
         }
     }
